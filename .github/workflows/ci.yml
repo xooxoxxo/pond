@@ -1,0 +1,63 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  # Hook's public repo at a reviewed commit. Its conformance/ folder holds the
+  # canonical vectors; mailbox/tests/ must match it byte for byte. Change this pin
+  # together with Hook's POND_REF (see Hook's conformance/README.md).
+  HOOK_REPOSITORY: xooxoxxo/hook
+  HOOK_REF: 8115ff687446400c56a81aac221705e92a21b935
+  HOOK_CONFORMANCE_DIR: ${{ github.workspace }}/hook-pin/conformance
+  HOOK_CONFORMANCE_REQUIRED: "1"
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          persist-credentials: false
+
+      - name: Check out Hook at the pinned commit
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          repository: ${{ env.HOOK_REPOSITORY }}
+          ref: ${{ env.HOOK_REF }}
+          path: hook-pin
+          persist-credentials: false
+
+      - name: Verify the Hook pin
+        run: test "$(git -C hook-pin rev-parse HEAD)" = "$HOOK_REF"
+
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+
+      - name: Install test tooling (exact versions, hash-checked)
+        run: |
+          python3 -m pip install --require-hashes --only-binary=:all: -r requirements-dev.txt
+
+      - name: Conformance sync with Hook
+        run: python3 mailbox/tests/conformance_sync.py --hook "$HOOK_CONFORMANCE_DIR"
+
+      - name: Conformance sync tests (no skips allowed)
+        run: |
+          python3 -m pytest -q -rs mailbox/tests/test_conformance_sync.py | tee "$RUNNER_TEMP/conformance-sync.log"
+          if grep -q SKIPPED "$RUNNER_TEMP/conformance-sync.log"; then
+            echo "a conformance sync test was skipped" >&2
+            exit 1
+          fi
+
+      - name: Full test suite
+        run: python3 -m pytest -q -rs mailbox/tests
