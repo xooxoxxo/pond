@@ -460,12 +460,22 @@ and a `linux/arm64` image, signed with cosign through GitHub's OIDC identity of 
 repository's release workflow (`.github/workflows/release.yml`). No key is stored
 anywhere: the signature names the workflow and the tag that made it.
 
+**Once, before the first release** (repository settings, owner only):
+
+- Environments → `release`: add the owner as a required reviewer. The publish job
+  waits for that approval on every tag.
+- Rules → a tag ruleset for `v*`: only the owner may create, update or delete those tags.
+
+**Each release:**
+
 1. On `main`, set `VERSION` in `mailbox/__init__.py` and add a `## X.Y.Z` section to
    `CHANGELOG.md` (that exact heading, with text under it). Merge it through review.
 2. Dry run: Actions → release → Run workflow on `main`. It runs the same checks and
-   tests, builds both platforms and tests each one, and has no job that can push or sign.
-3. Tag the reviewed commit on `main` and push the tag: `git tag -a vX.Y.Z <commit> -m "Pond X.Y.Z"`,
-   `git push origin vX.Y.Z`. Only a `vX.Y.Z` tag push publishes.
+   tests, builds the same index (both platforms and their provenance), tests each
+   platform image, and has no job that can push or sign.
+3. Tag the reviewed commit on `main` and push the tag:
+   `git tag -a vX.Y.Z <commit> -m "Pond X.Y.Z"`, `git push origin vX.Y.Z`. Only a
+   `vX.Y.Z` tag push publishes. Approve the `release` environment when the run asks.
 
 The workflow refuses to publish when:
 
@@ -476,12 +486,56 @@ The workflow refuses to publish when:
 - `ghcr.io/xooxoxxo/pond:X.Y.Z` already exists: a version is never overwritten. A
   fix ships as the next patch version.
 
-After the push it signs the index digest, runs `scripts/verify-image.sh` on it, and runs
-each platform image for `/version` (`pond`, `X.Y.Z`, protocol 5) and a check of every
-layer: `/app` holds only the files the Dockerfile's `COPY` names, and no layer has an
-`.env` file (`scripts/test-image.sh`, `scripts/check-image-files.py`). The run summary
-names the digest; the release notes carry the version, changelog section, digest,
-verification command and the Hook range that works with it.
+The publish job pushes the index **by digest only**, with no tag. It signs that digest,
+verifies the signature and both platforms (`scripts/verify-image.sh --digest-only`),
+and runs each platform image: `/version` must answer `pond`, `X.Y.Z`, protocol 5,
+`/health` must report the database up, and every layer is checked (`/app` holds only
+the files the Dockerfile's `COPY` names, no layer has an `.env` file;
+`scripts/test-image.sh`, `scripts/check-image-files.py`). Only then does it check
+again that the version is free and attach the tag to exactly those bytes
+(`scripts/registry-tag.sh`), and verify the tag. A failure on the way leaves an
+untagged digest nobody refers to, and the version is still free for a re-run.
+
+The version check asks the registry for the tag and accepts only a plain 404. Before
+the first release the package does not exist yet, and GHCR may answer that with
+something else: the early check then only warns, and the decisive one runs after the
+digest push has created the package. Any answer other than 404 there stops the run
+before tagging.
+
+**After the workflow:**
+
+1. First release only: Packages → `pond` → Package settings → change visibility to
+   public. GHCR creates packages private, even from a public repository.
+2. From a shell with no GHCR login (for example `export DOCKER_CONFIG="$(mktemp -d)"`):
+   `docker pull ghcr.io/xooxoxxo/pond@<digest>` and
+   `scripts/verify-image.sh X.Y.Z --digest <digest>`. Both must pass.
+3. Create the GitHub release for `vX.Y.Z` from the draft in the run summary (the
+   template below), and only then call the release usable.
+
+Release notes template (the run summary fills in everything but the Hook range):
+
+````markdown
+# Pond X.Y.Z
+
+Image: `ghcr.io/xooxoxxo/pond:X.Y.Z`
+Digest: `sha256:…` (one index: linux/amd64, linux/arm64)
+Works with Hook: <range>
+
+## Changes
+<the CHANGELOG.md `## X.Y.Z` section>
+
+## Verify
+```
+scripts/verify-image.sh X.Y.Z --digest sha256:…
+```
+````
+
+The Hook range comes from Hook, not from this repository: each Hook release states the
+Pond range it needs in its notes (`<!-- hook:pond=^1.5.0 -->`), and Hook 0.9.x compares
+the protocol integer (`PROTOCOL` in `mailbox/__init__.py`, 5). Name the Hook releases
+whose range includes X.Y.Z, and the protocol for 0.9.x. The CHANGELOG section says
+which Hook ranges keep working (for example "Hook clients that need `^1.5.0` keep
+working").
 
 Actions are pinned by commit, the base image and BuildKit by digest, `tzdata` and the
 test tools (`.github/release-requirements.txt`, hashed) by exact version, each at least

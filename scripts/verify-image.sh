@@ -2,11 +2,14 @@
 # Verify a published Pond image before you run it.
 #
 #   scripts/verify-image.sh 1.15.0 [--digest sha256:<release-notes digest>]
+#   scripts/verify-image.sh 1.15.0 --digest-only sha256:<digest>   (release workflow, before tagging)
+#   scripts/verify-image.sh --check-index <raw index JSON file>      (both platforms only, offline)
 #   scripts/verify-image.sh --self-test
 #
 # Checks, and exits non-zero on the first failure:
 #   1. ghcr.io/xooxoxxo/pond:<version> resolves to one OCI index (or manifest list),
-#      and that digest equals --digest when you pass the one from the release notes;
+#      and that digest equals --digest when you pass the one from the release notes
+#      (--digest-only skips the tag and checks repo@digest: the tag doesn't exist yet);
 #   2. the index holds a linux/amd64 and a linux/arm64 image;
 #   3. cosign verifies a signature on that exact digest, made by this repository's
 #      release workflow at the tag v<version>, through GitHub's OIDC issuer.
@@ -88,21 +91,29 @@ cosign_verify_args() {
 }
 
 verify() {
-  local version="$1" want_digest="$2" tmp digest platforms
+  local version="$1" want_digest="$2" mode="${3:-tag}" tmp digest platforms
   valid_version "$version" || { fail "version '$version' is not MAJOR.MINOR.PATCH (no leading v)"; return 1; }
+  if [[ -n "$want_digest" && ! "$want_digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+    fail "the digest '$want_digest' is not sha256:<64 hex>"; return 1
+  fi
   for tool in docker jq cosign; do
     command -v "$tool" >/dev/null || { fail "$tool is not installed"; return 1; }
   done
   tmp="$(mktemp -d)"
   trap 'rm -rf "$tmp"' RETURN
 
-  local ref="${IMAGE_REPO}:${version}"
-  docker buildx imagetools inspect "$ref" >"$tmp/inspect.txt" || { fail "cannot read $ref"; return 1; }
-  digest="$(parse_index_digest "$tmp/inspect.txt")"
-  if [[ -n "$want_digest" && "$digest" != "$want_digest" ]]; then
-    fail "$ref points at $digest, the release names $want_digest"; return 1
+  if [[ "$mode" == digest-only ]]; then
+    digest="$want_digest"
+    ok "checking ${IMAGE_REPO}@${digest} by digest (no tag)"
+  else
+    local ref="${IMAGE_REPO}:${version}"
+    docker buildx imagetools inspect "$ref" >"$tmp/inspect.txt" || { fail "cannot read $ref"; return 1; }
+    digest="$(parse_index_digest "$tmp/inspect.txt")"
+    if [[ -n "$want_digest" && "$digest" != "$want_digest" ]]; then
+      fail "$ref points at $digest, the release names $want_digest"; return 1
+    fi
+    ok "$ref -> $digest"
   fi
-  ok "$ref -> $digest"
 
   docker buildx imagetools inspect --raw "${IMAGE_REPO}@${digest}" >"$tmp/index.json" \
     || { fail "cannot read the index ${IMAGE_REPO}@${digest}"; return 1; }
@@ -154,6 +165,9 @@ self_test() {
   expect fail "cosign output signed at another tag" check_cosign_output "$dir/cosign-ok.json" "$D" "$(expected_identity 1.14.0)" "$iss"
   expect fail "cosign output from another issuer" check_cosign_output "$dir/cosign-other-issuer.json" "$D" "$id" "$iss"
   expect fail "cosign output for another digest" check_cosign_output "$dir/cosign-ok.json" "sha256:$(printf '2%.0s' {1..64})" "$id" "$iss"
+  expect pass "--check-index on a good index" bash "${BASH_SOURCE[0]}" --check-index "$dir/index-ok.json"
+  expect fail "--check-index on an index missing arm64" bash "${BASH_SOURCE[0]}" --check-index "$dir/index-no-arm64.json"
+  expect fail "--digest-only without a sha256 digest" verify 1.15.0 "latest" digest-only
   expect fail "cosign output with no signatures" check_cosign_output "$dir/cosign-empty.json" "$D" "$id" "$iss"
   echo "verify-image self-test: $passed passed, $failed failed"
   [[ "$failed" -eq 0 ]]
@@ -162,11 +176,21 @@ self_test() {
 main() {
   case "${1:-}" in
     --self-test) self_test ;;
-    ""|-h|--help) sed -n '2,16p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; [[ -n "${1:-}" ]] ;;
+    --check-index)
+      [[ -f "${2:-}" ]] || { fail "--check-index needs a file"; exit 2; }
+      check_platforms "$2" ;;
+    ""|-h|--help) sed -n '2,18p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; [[ -n "${1:-}" ]] ;;
     *)
       local version="$1" want=""; shift
-      if [[ "${1:-}" == "--digest" ]]; then want="${2:-}"; [[ -n "$want" ]] || { fail "--digest needs a value"; exit 2; }; fi
-      verify "$version" "$want"
+      local mode=tag
+      case "${1:-}" in
+        --digest) want="${2:-}" ;;
+        --digest-only) want="${2:-}"; mode="digest-only" ;;
+        "") ;;
+        *) fail "unknown option $1"; exit 2 ;;
+      esac
+      if [[ -n "${1:-}" && -z "$want" ]]; then fail "$1 needs a value"; exit 2; fi
+      verify "$version" "$want" "$mode"
       ;;
   esac
 }

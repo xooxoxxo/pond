@@ -1,9 +1,13 @@
 # Release: one cosign-signed OCI index of the Pond for linux/amd64 and linux/arm64.
 #
-# A push of a vX.Y.Z tag runs `check` then `publish`: ghcr.io/xooxoxxo/pond:X.Y.Z. Run by
-# hand (workflow_dispatch) it runs `check` then `dry-run`: the same checks, tests and
-# two-platform build, the same /version and layer checks, and no job that can push or
-# sign. Pull requests never run it. Releasing and verifying: README "Releasing".
+# A push of a vX.Y.Z tag runs `check` then `publish` (after the owner approves the `release`
+# environment): push one index by digest only, sign it, verify the signature and both
+# platforms, test /version, /health and the layers of each platform image, check the version
+# is still free, and only then tag the digest ghcr.io/xooxoxxo/pond:X.Y.Z. A failure before
+# the last steps leaves an untagged, unused digest and no version.
+# Run by hand (workflow_dispatch) it runs `check` then `dry-run`: the same checks, tests,
+# index shape and per-platform tests, and no job that can push or sign. Pull requests never
+# run it. Releasing and verifying: README "Releasing".
 name: release
 
 on:
@@ -120,15 +124,22 @@ jobs:
           # moby/buildkit:v0.35.1, pinned by digest.
           driver-opts: image=moby/buildkit@sha256:baf6138eb8c37644800c7c913fba051e840ebb9ba13eaf92d92ef9a1712d0b4c
 
-      - name: Build both platforms (no push)
+      - name: Build the index as publish would, into a local OCI archive (no push)
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: mailbox
           file: mailbox/Dockerfile
           platforms: ${{ env.PLATFORMS }}
-          push: false
-          provenance: false
-          tags: ${{ env.IMAGE_REPO }}:${{ env.VERSION }}
+          outputs: type=oci,dest=${{ runner.temp }}/pond-oci.tar
+          provenance: mode=min
+          sbom: false
+          annotations: |
+            index:org.opencontainers.image.title=Pond
+            index:org.opencontainers.image.description=The server behind Hook: asks from coding agents to their owner, over Telegram.
+            index:org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            index:org.opencontainers.image.version=${{ env.VERSION }}
+            index:org.opencontainers.image.revision=${{ github.sha }}
+            index:org.opencontainers.image.licenses=MIT
           labels: |
             org.opencontainers.image.title=Pond
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
@@ -136,7 +147,14 @@ jobs:
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.licenses=MIT
 
-      - name: /version and layer contents on both platforms
+      - name: The index holds both platforms
+        run: |
+          oci="$RUNNER_TEMP/oci"
+          mkdir -p "$oci" && tar -xf "$RUNNER_TEMP/pond-oci.tar" -C "$oci"
+          index="$(jq -r '.manifests[0].digest' "$oci/index.json")"
+          scripts/verify-image.sh --check-index "$oci/blobs/sha256/${index#sha256:}"
+
+      - name: /version, /health and layer contents on both platforms
         run: |
           for arch in amd64 arm64; do
             # From the builder's cache of the build above.
@@ -150,6 +168,9 @@ jobs:
     needs: check
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-24.04
+    # The owner approves each run here: the `release` environment has the owner as its
+    # required reviewer (repository settings, see README "Releasing").
+    environment: release
     # The only job that may write packages or mint an OIDC token.
     permissions:
       contents: read
@@ -157,6 +178,8 @@ jobs:
       id-token: write
     env:
       VERSION: ${{ needs.check.outputs.version }}
+      REGISTRY_USER: ${{ github.actor }}
+      REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
@@ -183,30 +206,36 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Refuse to overwrite a published version
+      # Early look only. Before the first release the package does not exist, and GHCR may
+      # answer that with something other than 404; the decisive check runs again right
+      # before tagging, once the digest push has created the package.
+      - name: The version is not taken (early look)
         run: |
-          if out="$(docker buildx imagetools inspect "$IMAGE_REPO:$VERSION" 2>&1)"; then
-            echo "::error::$IMAGE_REPO:$VERSION already exists; a release is never overwritten"
-            echo "$out" | head -n 3
-            exit 1
-          fi
-          case "$out" in
-            *"not found"*|*"manifest unknown"*|*"MANIFEST_UNKNOWN"*|*"NAME_UNKNOWN"*)
-              echo "$IMAGE_REPO:$VERSION is free" ;;
-            *) echo "::error::cannot tell whether $IMAGE_REPO:$VERSION exists: $out"; exit 1 ;;
+          rc=0; scripts/registry-tag.sh exists "$VERSION" || rc=$?
+          case "$rc" in
+            0) ;;
+            1) echo "::error::$IMAGE_REPO:$VERSION already exists; a release is never overwritten"; exit 1 ;;
+            *) echo "::warning::cannot tell yet whether $IMAGE_REPO:$VERSION exists; checked again before tagging" ;;
           esac
 
-      - name: Build and push one index for both platforms
+      # Pushed by digest only: no tag points at it until it is signed and tested.
+      - name: Build and push one index for both platforms, by digest
         id: build
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: mailbox
           file: mailbox/Dockerfile
           platforms: ${{ env.PLATFORMS }}
-          push: true
+          outputs: type=image,name=${{ env.IMAGE_REPO }},push-by-digest=true,name-canonical=true,push=true
           provenance: mode=min
           sbom: false
-          tags: ${{ env.IMAGE_REPO }}:${{ env.VERSION }}
+          annotations: |
+            index:org.opencontainers.image.title=Pond
+            index:org.opencontainers.image.description=The server behind Hook: asks from coding agents to their owner, over Telegram.
+            index:org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            index:org.opencontainers.image.version=${{ env.VERSION }}
+            index:org.opencontainers.image.revision=${{ github.sha }}
+            index:org.opencontainers.image.licenses=MIT
           labels: |
             org.opencontainers.image.title=Pond
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
@@ -219,35 +248,71 @@ jobs:
           DIGEST: ${{ steps.build.outputs.digest }}
         run: |
           [[ "$DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "::error::no digest from the build"; exit 1; }
-          cosign sign --yes "$IMAGE_REPO@$DIGEST"
+          # --recursive also signs each platform image, for anyone who pins one.
+          cosign sign --yes --recursive "$IMAGE_REPO@$DIGEST"
 
-      - name: Verify the index, both platforms and the signature
+      - name: Verify the signature and both platforms, by digest
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: scripts/verify-image.sh "$VERSION" --digest-only "$DIGEST"
+
+      - name: /version, /health and layer contents on both platform images
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          docker buildx imagetools inspect --raw "$IMAGE_REPO@$DIGEST" > "$RUNNER_TEMP/index.json"
+          scripts/verify-image.sh --check-index "$RUNNER_TEMP/index.json" > "$RUNNER_TEMP/platforms.txt"
+          [ "$(wc -l < "$RUNNER_TEMP/platforms.txt")" -eq 2 ] || { echo "::error::expected 2 platforms"; exit 1; }
+          while read -r platform ref_digest; do
+            arch="${platform#linux/}"
+            docker pull --platform "$platform" "$IMAGE_REPO@$ref_digest"
+            docker tag "$IMAGE_REPO@$ref_digest" "pond-release-check:$arch"
+            scripts/test-image.sh "pond-release-check:$arch" "$arch" "$VERSION"
+          done < "$RUNNER_TEMP/platforms.txt"
+
+      - name: The version is not taken (decisive, right before tagging)
+        run: |
+          scripts/registry-tag.sh exists "$VERSION" \
+            || { echo "::error::$IMAGE_REPO:$VERSION exists or cannot be checked; not tagging"; exit 1; }
+
+      - name: Tag the signed, tested digest as the version
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: scripts/registry-tag.sh tag "$VERSION" "$DIGEST"
+
+      - name: Verify the version tag
         env:
           DIGEST: ${{ steps.build.outputs.digest }}
         run: scripts/verify-image.sh "$VERSION" --digest "$DIGEST"
 
-      - name: /version and layer contents on both published platform images
+      - name: Release notes draft
         env:
           DIGEST: ${{ steps.build.outputs.digest }}
         run: |
-          docker buildx imagetools inspect --raw "$IMAGE_REPO@$DIGEST" > index.json
-          for arch in amd64 arm64; do
-            ref="$IMAGE_REPO@$(jq -r --arg a "$arch" \
-              '.manifests[] | select(.platform.os == "linux" and .platform.architecture == $a) | .digest' index.json)"
-            docker pull --platform "linux/$arch" "$ref"
-            docker tag "$ref" "pond-release-check:$arch"
-            scripts/test-image.sh "pond-release-check:$arch" "$arch" "$VERSION"
-          done
-
-      - name: Summary
-        env:
-          DIGEST: ${{ steps.build.outputs.digest }}
-        run: |
+          section="$(awk -v h="## $VERSION" '$0 == h {f=1; next} f && /^## / {exit} f' CHANGELOG.md)"
           {
-            echo "### Published $IMAGE_REPO:$VERSION"
+            echo "### Release notes draft: copy into the GitHub release for v$VERSION"
             echo
-            echo "Digest \`$DIGEST\` (one index: linux/amd64, linux/arm64), signed by"
-            echo "\`https://github.com/$GITHUB_REPOSITORY/.github/workflows/release.yml@$GITHUB_REF\`."
+            echo '````markdown'
+            echo "# Pond $VERSION"
             echo
-            echo "Verify: \`scripts/verify-image.sh $VERSION --digest $DIGEST\`"
+            echo "Image: \`$IMAGE_REPO:$VERSION\`"
+            echo "Digest: \`$DIGEST\` (one index: linux/amd64, linux/arm64)"
+            echo "Works with Hook: <the newest Hook releases whose notes carry <!-- hook:pond=RANGE --> with $VERSION in RANGE, e.g. ^1.5.0>; protocol $(sed -n 's/^PROTOCOL = //p' mailbox/__init__.py) for Hook 0.9.x"
+            echo
+            echo "## Changes"
+            echo "$section"
+            echo
+            echo "## Verify"
+            echo '```'
+            echo "scripts/verify-image.sh $VERSION --digest $DIGEST"
+            echo '```'
+            echo "or with cosign alone:"
+            echo '```'
+            echo "cosign verify $IMAGE_REPO@$DIGEST \\"
+            echo "  --certificate-identity https://github.com/$GITHUB_REPOSITORY/.github/workflows/release.yml@$GITHUB_REF \\"
+            echo "  --certificate-oidc-issuer https://token.actions.githubusercontent.com"
+            echo '```'
+            echo "Run it by digest: \`MAILBOX_IMAGE=$IMAGE_REPO@$DIGEST\`."
+            echo '````'
           } >> "$GITHUB_STEP_SUMMARY"
