@@ -84,6 +84,7 @@ class Report:
         return not self.errors
 
 
+# Keep this function identical to compare() in scripts/check-pond-sync.py in the Hook repo.
 def compare(hook_suite, pond_tests, shared=SHARED, pond_only=POND_ONLY):
     """Compare Hook's conformance folder with the Pond's tests folder."""
     hook_suite, pond_tests = Path(hook_suite), Path(pond_tests)
