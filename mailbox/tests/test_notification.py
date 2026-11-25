@@ -62,3 +62,9 @@ def test_errors_never_echo_a_value():
     assert "title: contains hidden or control characters (U+E0041)" in errors
     assert "body: secret-like value" in errors
     assert not any("call" in e or "ghp_" in e for e in errors)
+
+
+@pytest.mark.parametrize("ref", ["x\n", "brief:2026-10-17\n", "\nx"])
+def test_a_ref_with_a_newline_is_refused(ref):
+    _, errors = validate(dict(REMINDER, ref=ref))
+    assert errors == ["ref: must be 1 to 64 letters, digits, colon, dot, dash or underscore"]
