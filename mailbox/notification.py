@@ -20,7 +20,7 @@ MAX_ACTIONS = 2
 TOP_KEYS = {"kind", "ref", "title", "body", "actions"}
 HH_TOP_KEYS = TOP_KEYS | {"to"}
 ACTION_KEYS = {"id", "label"}
-_REF = re.compile(r"^[A-Za-z0-9:._-]{1,64}$")
+_REF = re.compile(r"[A-Za-z0-9:._-]{1,64}")  # used with fullmatch: no trailing newline
 
 
 def validate(obj: Any, household: bool = False) -> tuple[dict[str, Any], list[str]]:
@@ -36,7 +36,7 @@ def validate(obj: Any, household: bool = False) -> tuple[dict[str, Any], list[st
     elif household and kind != "reminder":
         errors.append("kind: a household instance takes reminders only")
     ref = obj.get("ref")
-    if not isinstance(ref, str) or not _REF.match(ref):
+    if not isinstance(ref, str) or not _REF.fullmatch(ref):
         errors.append("ref: must be 1 to 64 letters, digits, colon, dot, dash or underscore")
     _text(errors, "title", obj.get("title"), MAX_TITLE, required=True)
     _text(errors, "body", obj.get("body"), MAX_BODY, kind=MULTI)

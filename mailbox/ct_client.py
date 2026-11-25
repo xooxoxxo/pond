@@ -6,6 +6,7 @@ title could be in it)."""
 import http.client
 import json
 import urllib.error
+import urllib.parse
 import urllib.request
 from typing import Any, Optional
 
@@ -57,6 +58,15 @@ class CentralTimeError(Exception):
         self.reason = reason
 
 
+def _path_id(value: str, what: str) -> str:
+    """One path segment from a stored id: empty, `.` and `..` are refused before any
+    request, and anything outside a segment (`/`, `?`, `#`, `%`) is percent-encoded.
+    `:` is kept, so every id a notification ref allows goes out byte-identical."""
+    if not isinstance(value, str) or value in ("", ".", ".."):
+        raise CentralTimeError(0, what)
+    return urllib.parse.quote(value, safe=":")
+
+
 class CentralTimeClient:
     """JSON POSTs with the bearer: the asks instance's create and ack, the household instance's hh_* calls."""
 
@@ -94,7 +104,7 @@ class CentralTimeClient:
 
     def ack_fire(self, fire_id: str, action: str) -> dict[str, Any]:
         """POST /api/reminders/{id}/ack with done or tomorrow."""
-        return self._call("POST", f"/api/reminders/{fire_id}/ack", {"action": action}, "ack")
+        return self._call("POST", f"/api/reminders/{_path_id(fire_id, 'ack')}/ack", {"action": action}, "ack")
 
     def hh_command(self, body: dict[str, Any]) -> dict[str, Any]:
         """POST /api/hh/commands as the household relay; body carries actorTgId."""
@@ -102,7 +112,7 @@ class CentralTimeClient:
 
     def hh_ack(self, delivery_id: str, action: str, actor_tg_id: int) -> dict[str, Any]:
         """POST /api/hh/deliveries/{id}/ack with done, accept or decline and the tapping member."""
-        return self._call("POST", f"/api/hh/deliveries/{delivery_id}/ack", {"action": action, "actorTgId": actor_tg_id}, "hh-ack", reasons=HH_REASONS)
+        return self._call("POST", f"/api/hh/deliveries/{_path_id(delivery_id, 'hh-ack')}/ack", {"action": action, "actorTgId": actor_tg_id}, "hh-ack", reasons=HH_REASONS)
 
 
 class FakeCentralTimeClient(CentralTimeClient):

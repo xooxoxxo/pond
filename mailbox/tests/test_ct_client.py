@@ -129,3 +129,51 @@ def test_a_409_carries_a_whitelisted_reason_only(monkeypatch):
             CentralTimeClient("http://ct.test", TOKEN).ack_fire("f-1", "tomorrow")
         assert (exc.value.status, exc.value.what, exc.value.reason) == (409, "ack", reason)
         assert str(exc.value) == "central time ack 409"
+
+
+# --- the id in an ack path (1.15.1) --------------------------------------------------
+
+def _no_http(monkeypatch):
+    def fake_open(req, timeout=None):
+        raise AssertionError(f"no request may be sent: {req.full_url}")
+    monkeypatch.setattr(ct_client, "_open", fake_open)
+
+
+@pytest.mark.parametrize("bad", ["", ".", ".."])
+def test_an_empty_or_dot_id_is_refused_before_any_request(monkeypatch, bad):
+    _no_http(monkeypatch)
+    client = CentralTimeClient("http://ct.test", TOKEN)
+    with pytest.raises(CentralTimeError) as exc:
+        client.ack_fire(bad, "done")
+    assert (exc.value.status, exc.value.what) == (0, "ack")
+    with pytest.raises(CentralTimeError) as exc:
+        client.hh_ack(bad, "done", 1)
+    assert (exc.value.status, exc.value.what) == (0, "hh-ack")
+
+
+@pytest.mark.parametrize("bad, encoded", [("../items", "..%2Fitems"), ("a/b", "a%2Fb"), ("a%2Fb", "a%252Fb"),
+                                          ("a?x=1", "a%3Fx%3D1"), ("a#b", "a%23b")])
+def test_an_id_cannot_change_the_path(monkeypatch, bad, encoded):
+    seen = _capture_urlopen(monkeypatch, {"applied": True})
+    CentralTimeClient("http://ct.test", TOKEN).ack_fire(bad, "done")
+    assert seen["url"] == f"http://ct.test/api/reminders/{encoded}/ack"
+    CentralTimeClient("http://ct.test", TOKEN).hh_ack(bad, "done", 1)
+    assert seen["url"] == f"http://ct.test/api/hh/deliveries/{encoded}/ack"
+
+
+@pytest.mark.parametrize("good", ["f-1", "fire-1", "7c1b2e0e-0000-4000-8000-000000000001",
+                                  "brief:2026-10-17", "a.b_c:D-9", "..x", "x.."])
+def test_a_valid_id_gives_the_same_path_as_before(monkeypatch, good):
+    seen = _capture_urlopen(monkeypatch, {"applied": True})
+    CentralTimeClient("http://ct.test", TOKEN).ack_fire(good, "done")
+    assert seen["url"] == f"http://ct.test/api/reminders/{good}/ack"
+    CentralTimeClient("http://ct.test", TOKEN).hh_ack(good, "accept", 7)
+    assert seen["url"] == f"http://ct.test/api/hh/deliveries/{good}/ack"
+    assert seen["body"] == {"action": "accept", "actorTgId": 7}
+
+
+def test_the_fake_client_refuses_a_dot_id_too():
+    fake = ct_client.FakeCentralTimeClient()
+    with pytest.raises(CentralTimeError):
+        fake.ack_fire("..", "done")
+    assert fake.calls == []
