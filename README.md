@@ -487,6 +487,9 @@ anywhere: the signature names the workflow and the tag that made it.
 - Environments → `release`: add the owner as a required reviewer. The publish job
   waits for that approval on every tag.
 - Rules → a tag ruleset for `v*`: only the owner may create, update or delete those tags.
+- Rules → a branch ruleset for `main`: changes through pull requests only, and (once
+  Actions runs here) the `CI / test` check required. "The tag is on main" means
+  "reviewed" only with this in place.
 
 **Each release:**
 
@@ -504,7 +507,8 @@ The workflow refuses to publish when:
 - the tag is not `vMAJOR.MINOR.PATCH`, differs from `mailbox.VERSION`, or
   `CHANGELOG.md` has no `## X.Y.Z` section (`scripts/check-release.py`);
 - the tagged commit is not on `main`;
-- any test fails, including the vector-file comparison with Hook's conformance suite;
+- any test fails, including the vector-file comparison with Hook's conformance suite
+  (the release calls `ci.yml`, so it runs the PR tests with the same Hook pin);
 - `ghcr.io/xooxoxxo/pond:X.Y.Z` already exists: a version is never overwritten. A
   fix ships as the next patch version.
 
@@ -560,7 +564,7 @@ which Hook ranges keep working (for example "Hook clients that need `^1.5.0` kee
 working").
 
 Actions are pinned by commit, the base image and BuildKit by digest, `tzdata` and the
-test tools (`.github/release-requirements.txt`, hashed) by exact version, each at least
+test tools (`requirements-dev.txt`, hashed wheels) by exact version, each at least
 5 days old when pinned. Release script tests: `python3 -m pytest -q scripts/tests` and
 `scripts/verify-image.sh --self-test`.
 

@@ -1,11 +1,11 @@
 # Release: one cosign-signed OCI index of the Pond for linux/amd64 and linux/arm64.
 #
-# A push of a vX.Y.Z tag runs `check` then `publish` (after the owner approves the `release`
+# A push of a vX.Y.Z tag runs `ci` (ci.yml, the PR tests) and `check`, then `publish` (after the owner approves the `release`
 # environment): push one index by digest only, sign it, verify the signature and both
 # platforms, test /version, /health and the layers of each platform image, check the version
 # is still free, and only then tag the digest ghcr.io/xooxoxxo/pond:X.Y.Z. A failure before
 # the last steps leaves an untagged, unused digest and no version.
-# Run by hand (workflow_dispatch) it runs `check` then `dry-run`: the same checks, tests,
+# Run by hand (workflow_dispatch) it runs `ci` and `check`, then `dry-run`: the same checks, tests,
 # index shape and per-platform tests, and no job that can push or sign. Pull requests never
 # run it. Releasing and verifying: README "Releasing".
 name: release
@@ -27,16 +27,25 @@ concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: false
 
+# Explicit bash runs every step with -eo pipefail: a failing command piped into tee fails
+# the step. (GitHub's default `bash -e` has no pipefail.) scripts/tests checks this stays.
+defaults:
+  run:
+    shell: bash
+
 env:
   IMAGE_REPO: ghcr.io/xooxoxxo/pond
-  # Hook's canonical conformance suite, at the commit the shared vector files were last synced to.
-  HOOK_REPO: xooxoxxo/hook
-  HOOK_SHA: 8115ff687446400c56a81aac221705e92a21b935
   PLATFORMS: linux/amd64,linux/arm64
 
 jobs:
+  # The Pond tests and the conformance sync, exactly as PR CI runs them: one Hook pin
+  # (HOOK_REF in ci.yml), one requirements file, no skips allowed.
+  ci:
+    name: CI
+    uses: ./.github/workflows/ci.yml
+
   check:
-    name: Check and test
+    name: Release checks
     runs-on: ubuntu-24.04
     outputs:
       version: ${{ steps.version.outputs.version }}
@@ -75,26 +84,9 @@ jobs:
           git merge-base --is-ancestor "$GITHUB_SHA" origin/main \
             || { echo "::error::$GITHUB_SHA (tag ${GITHUB_REF_NAME}) is not on main"; exit 1; }
 
-      - name: Check out Hook's conformance suite
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
-        with:
-          repository: ${{ env.HOOK_REPO }}
-          ref: ${{ env.HOOK_SHA }}
-          path: _hook
-          persist-credentials: false
-
-      - name: Install test tools (pinned, hashed)
-        run: python3 -m pip install --require-hashes --no-deps -r .github/release-requirements.txt
-
-      - name: Pond tests, with the conformance sync
-        env:
-          HOOK_CONFORMANCE_DIR: ${{ github.workspace }}/_hook/conformance
+      - name: Install test tooling (exact versions, hash-checked)
         run: |
-          test -f "$HOOK_CONFORMANCE_DIR/manifest.json"
-          python3 -m pytest -q -rs mailbox/tests | tee pytest.txt
-          if grep -q "HOOK_CONFORMANCE_DIR is not set" pytest.txt; then
-            echo "::error::the conformance sync was skipped"; exit 1
-          fi
+          python3 -m pip install --require-hashes --only-binary=:all: -r requirements-dev.txt
 
       - name: Release script tests
         run: |
@@ -103,7 +95,7 @@ jobs:
 
   dry-run:
     name: Build both platforms (dry run, nothing pushed or signed)
-    needs: check
+    needs: [ci, check]
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-24.04
     env:
@@ -165,7 +157,7 @@ jobs:
 
   publish:
     name: Publish and sign ghcr.io/xooxoxxo/pond
-    needs: check
+    needs: [ci, check]
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-24.04
     # The owner approves each run here: the `release` environment has the owner as its

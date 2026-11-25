@@ -161,3 +161,36 @@ def test_verify_image_refuses_a_v_prefixed_version_before_any_network():
     run = subprocess.run(["bash", str(SCRIPTS / "verify-image.sh"), "v1.15.0"], capture_output=True, text=True)
     assert run.returncode != 0
     assert "is not MAJOR.MINOR.PATCH" in run.stderr
+
+
+# The workflows themselves (text checks: no YAML parser in the test tooling)
+
+WORKFLOWS = ROOT / ".github" / "workflows"
+
+
+@pytest.mark.parametrize("name", ["release.yml", "ci.yml"])
+def test_workflows_run_steps_with_pipefail(name):
+    # GitHub's default shell is `bash -e` without pipefail, so `pytest | tee` would pass on a
+    # failing pytest. An explicit `shell: bash` is `bash -eo pipefail`.
+    text = (WORKFLOWS / name).read_text()
+    assert "\ndefaults:\n  run:\n    shell: bash\n" in text
+
+
+def test_the_release_runs_ci_and_holds_no_hook_pin_of_its_own():
+    release = (WORKFLOWS / "release.yml").read_text()
+    ci = (WORKFLOWS / "ci.yml").read_text()
+    assert "uses: ./.github/workflows/ci.yml" in release
+    assert "workflow_call:" in ci
+    assert "HOOK_REF" in ci
+    assert "8115ff6" not in release and "HOOK_SHA" not in release and "HOOK_REPO" not in release
+    assert release.count("needs: [ci, check]") == 2  # dry-run and publish both wait for CI
+
+
+def test_pipefail_is_what_stops_a_failing_pipe():
+    # The behaviour the guard above relies on.
+    plain = subprocess.run(["bash", "-e", "-c", "false | tee /dev/null; echo continued"],
+                           capture_output=True, text=True)
+    strict = subprocess.run(["bash", "--noprofile", "--norc", "-eo", "pipefail", "-c",
+                             "false | tee /dev/null; echo continued"], capture_output=True, text=True)
+    assert plain.returncode == 0 and "continued" in plain.stdout
+    assert strict.returncode != 0 and "continued" not in strict.stdout
