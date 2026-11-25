@@ -1,7 +1,12 @@
-FROM python:3.12-alpine
+# Pinned by digest: python 3.12.16 on Alpine 3.24, the multi-arch index (linux/amd64 and
+# linux/arm64 among others), built 2026-11-05. Bump tag and digest together, to a build at
+# least 5 days old: docker buildx imagetools inspect python:<tag>.
+FROM python:3.12.16-alpine3.24@sha256:c5ba3deef00c7758561a0f03c26f44f10589263d40e732b8748e0d1f38f6dd89
 
-# tzdata: python:alpine ships no zoneinfo, and musl resolves a missing zone as UTC in silence.
-RUN apk add --no-cache tzdata && adduser -D -u 1000 mailbox
+# tzdata: the Pond needs zoneinfo, and musl resolves a missing zone as UTC in silence. Pinned
+# to the version the pinned base already carries (built 2026-11-04), so apk installs nothing
+# new; a base bump that changes it fails here until this pin moves with it.
+RUN apk add --no-cache tzdata=2026f-r0 && adduser -D -u 1000 mailbox
 
 WORKDIR /app
 

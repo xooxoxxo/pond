@@ -1,0 +1,14 @@
+[
+  {
+    "critical": {
+      "identity": {
+        "docker-reference": "ghcr.io/xooxoxxo/pond"
+      },
+      "image": {
+        "docker-manifest-digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+      },
+      "type": "cosign container image signature"
+    },
+    "optional": {}
+  }
+]

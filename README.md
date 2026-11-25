@@ -40,9 +40,9 @@ You need Docker with Compose, a Telegram bot token from
    daemon. Check the container clock: `docker compose exec -T mailbox date`
    prints the local time of `TZ`, and the startup line reads, for example with
    `TZ=Etc/UTC`, `capture: …, notify: … (tz Etc/UTC +0000 UTC)`: the zone the
-   daemon resolved with its offset, not the `TZ` value. The image installs
-   `tzdata` for that; `python:alpine` has none and would run any other zone
-   as UTC in silence.
+   daemon resolved with its offset, not the `TZ` value. The image pins
+   `tzdata` for that; without it musl would run any other zone as UTC in
+   silence.
 5. The Pond token (used by every API call except `/health` and `/i/<uuid>`)
    is generated once on first start and written to `backups/mailbox-token`
    (mode 600). It is never logged. Give it to your clients without displaying
@@ -452,3 +452,61 @@ python3 -m pytest -q mailbox/tests
 Set `HOOK_CONFORMANCE_DIR` to a Hook checkout's `conformance/` folder to also
 compare the shared vector files with Hook's; unset, that check is skipped. The
 `mailbox/tests/gen_*.py` generators rebuild the synthetic vector files.
+
+## Releasing
+
+A release is one OCI index, `ghcr.io/xooxoxxo/pond:X.Y.Z`, holding a `linux/amd64`
+and a `linux/arm64` image, signed with cosign through GitHub's OIDC identity of this
+repository's release workflow (`.github/workflows/release.yml`). No key is stored
+anywhere: the signature names the workflow and the tag that made it.
+
+1. On `main`, set `VERSION` in `mailbox/__init__.py` and add a `## X.Y.Z` section to
+   `CHANGELOG.md` (that exact heading, with text under it). Merge it through review.
+2. Dry run: Actions → release → Run workflow on `main`. It runs the same checks and
+   tests, builds both platforms and tests each one, and has no job that can push or sign.
+3. Tag the reviewed commit on `main` and push the tag: `git tag -a vX.Y.Z <commit> -m "Pond X.Y.Z"`,
+   `git push origin vX.Y.Z`. Only a `vX.Y.Z` tag push publishes.
+
+The workflow refuses to publish when:
+
+- the tag is not `vMAJOR.MINOR.PATCH`, differs from `mailbox.VERSION`, or
+  `CHANGELOG.md` has no `## X.Y.Z` section (`scripts/check-release.py`);
+- the tagged commit is not on `main`;
+- any test fails, including the vector-file comparison with Hook's conformance suite;
+- `ghcr.io/xooxoxxo/pond:X.Y.Z` already exists: a version is never overwritten. A
+  fix ships as the next patch version.
+
+After the push it signs the index digest, runs `scripts/verify-image.sh` on it, and runs
+each platform image for `/version` (`pond`, `X.Y.Z`, protocol 5) and a check of every
+layer: `/app` holds only the files the Dockerfile's `COPY` names, and no layer has an
+`.env` file (`scripts/test-image.sh`, `scripts/check-image-files.py`). The run summary
+names the digest; the release notes carry the version, changelog section, digest,
+verification command and the Hook range that works with it.
+
+Actions are pinned by commit, the base image and BuildKit by digest, `tzdata` and the
+test tools (`.github/release-requirements.txt`, hashed) by exact version, each at least
+5 days old when pinned. Release script tests: `python3 -m pytest -q scripts/tests` and
+`scripts/verify-image.sh --self-test`.
+
+## Verifying an image
+
+Before you run a release, check it is the one this repository's workflow signed. You
+need Docker with buildx, [cosign](https://docs.sigstore.dev/cosign/system_config/installation/)
+and `jq`; no login.
+
+```
+scripts/verify-image.sh 1.15.0 --digest sha256:<digest from the release notes>
+```
+
+It resolves `ghcr.io/xooxoxxo/pond:1.15.0`, checks the digest matches the release notes,
+that the index holds both `linux/amd64` and `linux/arm64`, and that cosign verifies a
+signature on that digest from exactly this identity and issuer:
+
+```
+cosign verify ghcr.io/xooxoxxo/pond@sha256:<digest> \
+  --certificate-identity https://github.com/xooxoxxo/pond/.github/workflows/release.yml@refs/tags/v1.15.0 \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com
+```
+
+Then run it by digest, not by tag: set `MAILBOX_IMAGE=ghcr.io/xooxoxxo/pond@sha256:<digest>`
+in `.env` and `docker compose pull && docker compose up -d --no-build`.

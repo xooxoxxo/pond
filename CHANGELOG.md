@@ -8,6 +8,11 @@ only for a breaking change: a removed route, a changed meaning, or required
 auth that isn't behind a switch. `protocol` is kept for Hook 0.9.x and its
 clients, which compare it; new code reads `version`.
 
+Each release has a section headed exactly `## X.Y.Z`, with text under it: the release
+workflow refuses a tag without one (`scripts/check-release.py`). A release is published
+as the signed image `ghcr.io/xooxoxxo/pond:X.Y.Z` (README, "Releasing" and "Verifying an
+image").
+
 ## 1.15.0
 
 Backwards compatible: `protocol` stays 5, and Hook clients that need `^1.5.0`

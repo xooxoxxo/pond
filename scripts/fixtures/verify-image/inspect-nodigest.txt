@@ -1,0 +1,7 @@
+Name:      ghcr.io/xooxoxxo/pond:1.15.0
+MediaType: application/vnd.oci.image.index.v1+json
+           
+Manifests: 
+  Name:        ghcr.io/xooxoxxo/pond:1.15.0@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+  MediaType:   application/vnd.oci.image.manifest.v1+json
+  Platform:    linux/amd64
