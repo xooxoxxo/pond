@@ -443,12 +443,35 @@ for byte (`HOOK_CONFORMANCE_DIR`, see Development).
 
 ## Development
 
-Python 3.12 and pytest. From the repository root:
+Python 3.12 and pytest (`requirements-dev.txt` pins the exact, hash-checked
+versions CI uses). From the repository root:
 
 ```
+python3 -m pip install --require-hashes --only-binary=:all: -r requirements-dev.txt
 python3 -m pytest -q mailbox/tests
 ```
 
 Set `HOOK_CONFORMANCE_DIR` to a Hook checkout's `conformance/` folder to also
-compare the shared vector files with Hook's; unset, that check is skipped. The
-`mailbox/tests/gen_*.py` generators rebuild the synthetic vector files.
+compare the shared vector files with Hook's; unset, that comparison is skipped
+locally. The `mailbox/tests/gen_*.py` generators rebuild the synthetic vector
+files.
+
+`mailbox/tests/conformance_sync.py` is the comparison on its own (stdlib only):
+
+```
+python3 mailbox/tests/conformance_sync.py --hook ../hook/conformance
+```
+
+It pins the shared files (`SHARED`, 25 manifest paths) and the vectors only the
+Pond reads (`POND_ONLY`), and exits 1 on a missing copy, a one-byte difference, a
+manifest path with no file, an empty intersection or an unclassified vector.
+Hook runs the same check as `scripts/check-pond-sync.py`; keep the two lists the
+same in both repos.
+
+CI checks out Hook at the commit pinned in `.github/workflows/ci.yml`
+(`HOOK_REF`), sets `HOOK_CONFORMANCE_REQUIRED=1` so the comparison cannot skip,
+and fails if any conformance sync test is skipped. Hook's CI pins this repo the
+same way (`POND_REF`). When a fixture changes in both repos, generate it here,
+copy it to Hook's `conformance/`, compare the two PR head commits with
+`conformance_sync.py`, and after both merge move each pin to the other repo's
+merged commit. Hook's `conformance/README.md` gives the steps.
