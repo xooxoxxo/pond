@@ -178,8 +178,6 @@ jobs:
       id-token: write
     env:
       VERSION: ${{ needs.check.outputs.version }}
-      REGISTRY_USER: ${{ github.actor }}
-      REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
@@ -210,6 +208,9 @@ jobs:
       # answer that with something other than 404; the decisive check runs again right
       # before tagging, once the digest push has created the package.
       - name: The version is not taken (early look)
+        env:
+          REGISTRY_USER: ${{ github.actor }}
+          REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           rc=0; scripts/registry-tag.sh exists "$VERSION" || rc=$?
           case "$rc" in
@@ -271,12 +272,17 @@ jobs:
           done < "$RUNNER_TEMP/platforms.txt"
 
       - name: The version is not taken (decisive, right before tagging)
+        env:
+          REGISTRY_USER: ${{ github.actor }}
+          REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           scripts/registry-tag.sh exists "$VERSION" \
             || { echo "::error::$IMAGE_REPO:$VERSION exists or cannot be checked; not tagging"; exit 1; }
 
       - name: Tag the signed, tested digest as the version
         env:
+          REGISTRY_USER: ${{ github.actor }}
+          REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           DIGEST: ${{ steps.build.outputs.digest }}
         run: scripts/registry-tag.sh tag "$VERSION" "$DIGEST"
 

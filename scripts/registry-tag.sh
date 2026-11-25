@@ -17,6 +17,16 @@ accept="$accept,application/vnd.oci.image.manifest.v1+json,application/vnd.docke
 
 say() { echo "registry-tag: $*" >&2; }
 
+# curl with a secret curl option (user = "..." or header = "...") read from stdin, so no
+# credential ever appears on a command line (ps, /proc/*/cmdline).
+curl_secret() {
+  local option="$1" value; shift
+  value="${option#*= \"}"; value="${value%\"}"
+  # A quote, backslash or line break in the value would change the curl config line.
+  [[ "$value" != *[\"\\]* && "$value" != *$'\n'* ]] || { say "refusing a credential with \" \\ or a line break"; return 1; }
+  printf '%s\n' "$option" | curl --config - "$@"
+}
+
 # A registry token for pull,push; with no REGISTRY_TOKEN and ANONYMOUS=1, an anonymous pull
 # token (for trying `exists` on a public image).
 bearer() {
@@ -25,7 +35,7 @@ bearer() {
     return
   fi
   : "${REGISTRY_USER:?REGISTRY_USER is not set}" "${REGISTRY_TOKEN:?REGISTRY_TOKEN is not set}"
-  curl -fsS -u "$REGISTRY_USER:$REGISTRY_TOKEN" \
+  curl_secret "user = \"$REGISTRY_USER:$REGISTRY_TOKEN\"" -fsS \
     "https://$host/token?service=$host&scope=repository:$name:pull,push" | jq -er .token
 }
 
@@ -38,7 +48,7 @@ exists() {
   local version="$1" token code
   valid_version "$version" || { say "version '$version' is not MAJOR.MINOR.PATCH"; return 2; }
   token="$(bearer)" || { say "no registry token"; return 2; }
-  code="$(curl -sS -o /dev/null -w '%{http_code}' -I -H "Authorization: Bearer $token" \
+  code="$(curl_secret "header = \"Authorization: Bearer $token\"" -sS -o /dev/null -w '%{http_code}' -I \
     -H "Accept: $accept" "https://$host/v2/$name/manifests/$version")" || code=000
   case "$code" in
     404) say "$IMAGE_REPO:$version is free (404)"; return 0 ;;
@@ -55,7 +65,7 @@ tag() {
   token="$(bearer)"
   tmp="$(mktemp)"
   trap 'rm -f "$tmp"' RETURN
-  curl -fsS -H "Authorization: Bearer $token" -H "Accept: $accept" \
+  curl_secret "header = \"Authorization: Bearer $token\"" -fsS -H "Accept: $accept" \
     "https://$host/v2/$name/manifests/$digest" -o "$tmp"
   got="sha256:$(sha256 "$tmp")"
   [[ "$got" == "$digest" ]] || { say "fetched bytes hash to $got, not $digest"; return 1; }
@@ -64,7 +74,7 @@ tag() {
     application/vnd.oci.image.index.v1+json|application/vnd.docker.distribution.manifest.list.v2+json) ;;
     *) say "$digest is $media, not an index"; return 1 ;;
   esac
-  code="$(curl -sS -o /dev/null -w '%{http_code}' -X PUT -H "Authorization: Bearer $token" \
+  code="$(curl_secret "header = \"Authorization: Bearer $token\"" -sS -o /dev/null -w '%{http_code}' -X PUT \
     -H "Content-Type: $media" --data-binary "@$tmp" "https://$host/v2/$name/manifests/$version")"
   [[ "$code" == 201 || "$code" == 200 ]] || { say "tagging $version failed (HTTP $code)"; return 1; }
   say "$IMAGE_REPO:$version -> $digest"
