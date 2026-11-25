@@ -1,0 +1,17 @@
+[
+  {
+    "critical": {
+      "identity": {
+        "docker-reference": "ghcr.io/xooxoxxo/pond"
+      },
+      "image": {
+        "docker-manifest-digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+      },
+      "type": "cosign container image signature"
+    },
+    "optional": {
+      "Subject": "https://github.com/xooxoxxo/pond/.github/workflows/release.yml@refs/tags/v1.15.0",
+      "Issuer": "https://accounts.example.com"
+    }
+  }
+]

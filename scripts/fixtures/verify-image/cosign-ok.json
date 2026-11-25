@@ -1,0 +1,21 @@
+[
+  {
+    "critical": {
+      "identity": {
+        "docker-reference": "ghcr.io/xooxoxxo/pond"
+      },
+      "image": {
+        "docker-manifest-digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+      },
+      "type": "cosign container image signature"
+    },
+    "optional": {
+      "Subject": "https://github.com/xooxoxxo/pond/.github/workflows/release.yml@refs/tags/v1.15.0",
+      "Issuer": "https://token.actions.githubusercontent.com",
+      "1.3.6.1.4.1.57264.1.1": "https://token.actions.githubusercontent.com",
+      "githubWorkflowRepository": "xooxoxxo/pond",
+      "githubWorkflowRef": "refs/tags/v1.15.0",
+      "githubWorkflowTrigger": "push"
+    }
+  }
+]

@@ -1,0 +1,316 @@
+# Release: one cosign-signed OCI index of the Pond for linux/amd64 and linux/arm64.
+#
+# A push of a vX.Y.Z tag runs `ci` (ci.yml, the PR tests) and `check`, then `publish` (after the owner approves the `release`
+# environment): push one index by digest only, sign it, verify the signature and both
+# platforms, test /version, /health and the layers of each platform image, check the version
+# is still free, and only then tag the digest ghcr.io/xooxoxxo/pond:X.Y.Z. A failure before
+# the last steps leaves an untagged, unused digest and no version.
+# Run by hand (workflow_dispatch) it runs `ci` and `check`, then `dry-run`: the same checks, tests,
+# index shape and per-platform tests, and no job that can push or sign. Pull requests never
+# run it. Releasing and verifying: README "Releasing".
+name: release
+
+on:
+  push:
+    tags: ["v*.*.*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to dry-run, X.Y.Z (empty: mailbox.VERSION). Never publishes."
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+# Explicit bash runs every step with -eo pipefail: a failing command piped into tee fails
+# the step. (GitHub's default `bash -e` has no pipefail.) scripts/tests checks this stays.
+defaults:
+  run:
+    shell: bash
+
+env:
+  IMAGE_REPO: ghcr.io/xooxoxxo/pond
+  PLATFORMS: linux/amd64,linux/arm64
+
+jobs:
+  # The Pond tests and the conformance sync, exactly as PR CI runs them: one Hook pin
+  # (HOOK_REF in ci.yml), one requirements file, no skips allowed.
+  ci:
+    name: CI
+    uses: ./.github/workflows/ci.yml
+
+  check:
+    name: Release checks
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+
+      - name: Tag, mailbox.VERSION and CHANGELOG agree
+        id: version
+        env:
+          EVENT: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref_name }}
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          if [ "$EVENT" = push ]; then
+            tag="$REF_NAME"
+          elif [ -n "$INPUT_VERSION" ]; then
+            tag="v$INPUT_VERSION"
+          else
+            tag="v$(sed -n 's/^VERSION = "\(.*\)"$/\1/p' mailbox/__init__.py)"
+          fi
+          version="$(python3 scripts/check-release.py "$tag")"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "Release candidate $tag at $(git rev-parse HEAD)"
+
+      - name: The tag is on main
+        if: github.event_name == 'push'
+        run: |
+          git fetch --no-tags origin main
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main \
+            || { echo "::error::$GITHUB_SHA (tag ${GITHUB_REF_NAME}) is not on main"; exit 1; }
+
+      - name: Install test tooling (exact versions, hash-checked)
+        run: |
+          python3 -m pip install --require-hashes --only-binary=:all: -r requirements-dev.txt
+
+      - name: Release script tests
+        run: |
+          python3 -m pytest -q scripts/tests
+          bash scripts/verify-image.sh --self-test
+
+  dry-run:
+    name: Build both platforms (dry run, nothing pushed or signed)
+    needs: [ci, check]
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    env:
+      VERSION: ${{ needs.check.outputs.version }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          persist-credentials: false
+
+      - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+        with:
+          # tonistiigi/binfmt:qemu-v10.2.3, pinned by digest.
+          image: docker.io/tonistiigi/binfmt@sha256:400a4873b838d1b89194d982c45e5fb3cda4593fbfd7e08a02e76b03b21166f0
+          platforms: arm64
+
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+        with:
+          # moby/buildkit:v0.35.1, pinned by digest.
+          driver-opts: image=moby/buildkit@sha256:baf6138eb8c37644800c7c913fba051e840ebb9ba13eaf92d92ef9a1712d0b4c
+
+      - name: Build the index as publish would, into a local OCI archive (no push)
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: mailbox
+          file: mailbox/Dockerfile
+          platforms: ${{ env.PLATFORMS }}
+          outputs: type=oci,dest=${{ runner.temp }}/pond-oci.tar
+          provenance: mode=min
+          sbom: false
+          annotations: |
+            index:org.opencontainers.image.title=Pond
+            index:org.opencontainers.image.description=The server behind Hook: asks from coding agents to their owner, over Telegram.
+            index:org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            index:org.opencontainers.image.version=${{ env.VERSION }}
+            index:org.opencontainers.image.revision=${{ github.sha }}
+            index:org.opencontainers.image.licenses=MIT
+          labels: |
+            org.opencontainers.image.title=Pond
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.version=${{ env.VERSION }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.licenses=MIT
+
+      - name: The index holds both platforms
+        run: |
+          oci="$RUNNER_TEMP/oci"
+          mkdir -p "$oci" && tar -xf "$RUNNER_TEMP/pond-oci.tar" -C "$oci"
+          index="$(jq -r '.manifests[0].digest' "$oci/index.json")"
+          scripts/verify-image.sh --check-index "$oci/blobs/sha256/${index#sha256:}"
+
+      - name: /version, /health and layer contents on both platforms
+        run: |
+          for arch in amd64 arm64; do
+            # From the builder's cache of the build above.
+            docker buildx build --platform "linux/$arch" --load -t "pond-release-check:$arch" mailbox
+            scripts/test-image.sh "pond-release-check:$arch" "$arch" "$VERSION"
+          done
+          echo "### Dry run for $VERSION: built for $PLATFORMS, tested, nothing pushed or signed" >> "$GITHUB_STEP_SUMMARY"
+
+  publish:
+    name: Publish and sign ghcr.io/xooxoxxo/pond
+    needs: [ci, check]
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-24.04
+    # The owner approves each run here: the `release` environment has the owner as its
+    # required reviewer (repository settings, see README "Releasing").
+    environment: release
+    # The only job that may write packages or mint an OIDC token.
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    env:
+      VERSION: ${{ needs.check.outputs.version }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          persist-credentials: false
+
+      - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+        with:
+          # tonistiigi/binfmt:qemu-v10.2.3, pinned by digest.
+          image: docker.io/tonistiigi/binfmt@sha256:400a4873b838d1b89194d982c45e5fb3cda4593fbfd7e08a02e76b03b21166f0
+          platforms: arm64
+
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+        with:
+          # moby/buildkit:v0.35.1, pinned by digest.
+          driver-opts: image=moby/buildkit@sha256:baf6138eb8c37644800c7c913fba051e840ebb9ba13eaf92d92ef9a1712d0b4c
+
+      - uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532 # v4.1.3
+        with:
+          cosign-release: v3.1.4
+
+      - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Early look only. Before the first release the package does not exist, and GHCR may
+      # answer that with something other than 404; the decisive check runs again right
+      # before tagging, once the digest push has created the package.
+      - name: The version is not taken (early look)
+        env:
+          REGISTRY_USER: ${{ github.actor }}
+          REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          rc=0; scripts/registry-tag.sh exists "$VERSION" || rc=$?
+          case "$rc" in
+            0) ;;
+            1) echo "::error::$IMAGE_REPO:$VERSION already exists; a release is never overwritten"; exit 1 ;;
+            *) echo "::warning::cannot tell yet whether $IMAGE_REPO:$VERSION exists; checked again before tagging" ;;
+          esac
+
+      # Pushed by digest only: no tag points at it until it is signed and tested.
+      - name: Build and push one index for both platforms, by digest
+        id: build
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: mailbox
+          file: mailbox/Dockerfile
+          platforms: ${{ env.PLATFORMS }}
+          outputs: type=image,name=${{ env.IMAGE_REPO }},push-by-digest=true,name-canonical=true,push=true
+          provenance: mode=min
+          sbom: false
+          annotations: |
+            index:org.opencontainers.image.title=Pond
+            index:org.opencontainers.image.description=The server behind Hook: asks from coding agents to their owner, over Telegram.
+            index:org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            index:org.opencontainers.image.version=${{ env.VERSION }}
+            index:org.opencontainers.image.revision=${{ github.sha }}
+            index:org.opencontainers.image.licenses=MIT
+          labels: |
+            org.opencontainers.image.title=Pond
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.version=${{ env.VERSION }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.licenses=MIT
+
+      - name: Sign the digest (GitHub OIDC, keyless)
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          [[ "$DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "::error::no digest from the build"; exit 1; }
+          # --recursive also signs each platform image, for anyone who pins one.
+          cosign sign --yes --recursive "$IMAGE_REPO@$DIGEST"
+
+      - name: Verify the signature and both platforms, by digest
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: scripts/verify-image.sh "$VERSION" --digest-only "$DIGEST"
+
+      - name: /version, /health and layer contents on both platform images
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          docker buildx imagetools inspect --raw "$IMAGE_REPO@$DIGEST" > "$RUNNER_TEMP/index.json"
+          scripts/verify-image.sh --check-index "$RUNNER_TEMP/index.json" > "$RUNNER_TEMP/platforms.txt"
+          [ "$(wc -l < "$RUNNER_TEMP/platforms.txt")" -eq 2 ] || { echo "::error::expected 2 platforms"; exit 1; }
+          while read -r platform ref_digest; do
+            arch="${platform#linux/}"
+            docker pull --platform "$platform" "$IMAGE_REPO@$ref_digest"
+            docker tag "$IMAGE_REPO@$ref_digest" "pond-release-check:$arch"
+            scripts/test-image.sh "pond-release-check:$arch" "$arch" "$VERSION"
+          done < "$RUNNER_TEMP/platforms.txt"
+
+      - name: The version is not taken (decisive, right before tagging)
+        env:
+          REGISTRY_USER: ${{ github.actor }}
+          REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          scripts/registry-tag.sh exists "$VERSION" \
+            || { echo "::error::$IMAGE_REPO:$VERSION exists or cannot be checked; not tagging"; exit 1; }
+
+      - name: Tag the signed, tested digest as the version
+        env:
+          REGISTRY_USER: ${{ github.actor }}
+          REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: scripts/registry-tag.sh tag "$VERSION" "$DIGEST"
+
+      - name: Verify the version tag
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: scripts/verify-image.sh "$VERSION" --digest "$DIGEST"
+
+      - name: Release notes draft
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          section="$(awk -v h="## $VERSION" '$0 == h {f=1; next} f && /^## / {exit} f' CHANGELOG.md)"
+          {
+            echo "### Release notes draft: copy into the GitHub release for v$VERSION"
+            echo
+            echo '````markdown'
+            echo "# Pond $VERSION"
+            echo
+            echo "Image: \`$IMAGE_REPO:$VERSION\`"
+            echo "Digest: \`$DIGEST\` (one index: linux/amd64, linux/arm64)"
+            echo "Works with Hook: <the newest Hook releases whose notes carry <!-- hook:pond=RANGE --> with $VERSION in RANGE, e.g. ^1.5.0>; protocol $(sed -n 's/^PROTOCOL = //p' mailbox/__init__.py) for Hook 0.9.x"
+            echo
+            echo "## Changes"
+            echo "$section"
+            echo
+            echo "## Verify"
+            echo '```'
+            echo "scripts/verify-image.sh $VERSION --digest $DIGEST"
+            echo '```'
+            echo "or with cosign alone:"
+            echo '```'
+            echo "cosign verify $IMAGE_REPO@$DIGEST \\"
+            echo "  --certificate-identity https://github.com/$GITHUB_REPOSITORY/.github/workflows/release.yml@$GITHUB_REF \\"
+            echo "  --certificate-oidc-issuer https://token.actions.githubusercontent.com"
+            echo '```'
+            echo "Run it by digest: \`MAILBOX_IMAGE=$IMAGE_REPO@$DIGEST\`."
+            echo '````'
+          } >> "$GITHUB_STEP_SUMMARY"

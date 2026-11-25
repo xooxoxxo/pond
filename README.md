@@ -40,9 +40,9 @@ You need Docker with Compose, a Telegram bot token from
    daemon. Check the container clock: `docker compose exec -T mailbox date`
    prints the local time of `TZ`, and the startup line reads, for example with
    `TZ=Etc/UTC`, `capture: …, notify: … (tz Etc/UTC +0000 UTC)`: the zone the
-   daemon resolved with its offset, not the `TZ` value. The image installs
-   `tzdata` for that; `python:alpine` has none and would run any other zone
-   as UTC in silence.
+   daemon resolved with its offset, not the `TZ` value. The image pins
+   `tzdata` for that; without it musl would run any other zone as UTC in
+   silence.
 5. The Pond token (used by every API call except `/health` and `/i/<uuid>`)
    is generated once on first start and written to `backups/mailbox-token`
    (mode 600). It is never logged. Give it to your clients without displaying
@@ -471,7 +471,125 @@ same in both repos.
 CI checks out Hook at the commit pinned in `.github/workflows/ci.yml`
 (`HOOK_REF`), sets `HOOK_CONFORMANCE_REQUIRED=1` so the comparison cannot skip,
 and fails if any conformance sync test is skipped. Hook's CI pins this repo the
-same way (`POND_REF`). When a fixture changes in both repos, generate it here,
-copy it to Hook's `conformance/`, compare the two PR head commits with
-`conformance_sync.py`, and after both merge move each pin to the other repo's
-merged commit. Hook's `conformance/README.md` gives the steps.
+same way (`POND_REF`). `HOOK_REF` in `ci.yml` is the only Hook pin in this repo: the
+release workflow calls `ci.yml` for its tests. To change a shared fixture, follow Hook's
+`conformance/README.md` ("To change a shared fixture").
+
+## Releasing
+
+A release is one OCI index, `ghcr.io/xooxoxxo/pond:X.Y.Z`, holding a `linux/amd64`
+and a `linux/arm64` image, signed with cosign through GitHub's OIDC identity of this
+repository's release workflow (`.github/workflows/release.yml`). No key is stored
+anywhere: the signature names the workflow and the tag that made it.
+
+**Once, before the first release** (repository settings, owner only):
+
+- Environments → `release`: add the owner as a required reviewer. The publish job
+  waits for that approval on every tag.
+- Rules → a tag ruleset for `v*`: only the owner may create, update or delete those tags.
+- Rules → a branch ruleset for `main`: changes through pull requests only, and (once
+  Actions runs here) the `CI / test` check required. "The tag is on main" means
+  "reviewed" only with this in place.
+
+**Each release:**
+
+1. On `main`, set `VERSION` in `mailbox/__init__.py` and add a `## X.Y.Z` section to
+   `CHANGELOG.md` (that exact heading, with text under it). Merge it through review.
+2. Dry run: Actions → release → Run workflow on `main`. It runs the same checks and
+   tests, builds the same index (both platforms and their provenance), tests each
+   platform image, and has no job that can push or sign.
+3. Tag the reviewed commit on `main` and push the tag:
+   `git tag -a vX.Y.Z <commit> -m "Pond X.Y.Z"`, `git push origin vX.Y.Z`. Only a
+   `vX.Y.Z` tag push publishes. Approve the `release` environment when the run asks.
+
+The workflow refuses to publish when:
+
+- the tag is not `vMAJOR.MINOR.PATCH`, differs from `mailbox.VERSION`, or
+  `CHANGELOG.md` has no `## X.Y.Z` section (`scripts/check-release.py`);
+- the tagged commit is not on `main`;
+- any test fails, including the vector-file comparison with Hook's conformance suite
+  (the release calls `ci.yml`, so it runs the PR tests with the same Hook pin);
+- `ghcr.io/xooxoxxo/pond:X.Y.Z` already exists: a version is never overwritten. A
+  fix ships as the next patch version.
+
+The publish job pushes the index **by digest only**, with no tag. It signs that digest,
+verifies the signature and both platforms (`scripts/verify-image.sh --digest-only`),
+and runs each platform image: `/version` must answer `pond`, `X.Y.Z`, protocol 5,
+`/health` must report the database up, and every layer is checked (`/app` holds only
+the files the Dockerfile's `COPY` names, no layer has an `.env` file;
+`scripts/test-image.sh`, `scripts/check-image-files.py`). Only then does it check
+again that the version is free and attach the tag to exactly those bytes
+(`scripts/registry-tag.sh`), and verify the tag. A failure on the way leaves an
+untagged digest nobody refers to, and the version is still free for a re-run.
+
+The version check asks the registry for the tag and accepts only a plain 404. Before
+the first release the package does not exist yet, and GHCR may answer that with
+something else: the early check then only warns, and the decisive one runs after the
+digest push has created the package. Any answer other than 404 there stops the run
+before tagging.
+
+**After the workflow:**
+
+1. First release only: Packages → `pond` → Package settings → change visibility to
+   public. GHCR creates packages private, even from a public repository.
+2. From a shell with no GHCR login (for example `export DOCKER_CONFIG="$(mktemp -d)"`):
+   `docker pull ghcr.io/xooxoxxo/pond@<digest>` and
+   `scripts/verify-image.sh X.Y.Z --digest <digest>`. Both must pass.
+3. Create the GitHub release for `vX.Y.Z` from the draft in the run summary (the
+   template below), and only then call the release usable.
+
+Release notes template (the run summary fills in everything but the Hook range):
+
+````markdown
+# Pond X.Y.Z
+
+Image: `ghcr.io/xooxoxxo/pond:X.Y.Z`
+Digest: `sha256:…` (one index: linux/amd64, linux/arm64)
+Works with Hook: <range>
+
+## Changes
+<the CHANGELOG.md `## X.Y.Z` section>
+
+## Verify
+```
+scripts/verify-image.sh X.Y.Z --digest sha256:…
+```
+````
+
+The Hook range comes from Hook, not from this repository: each Hook release states the
+Pond range it needs in its notes (`<!-- hook:pond=^1.5.0 -->`), and Hook 0.9.x compares
+the protocol integer (`PROTOCOL` in `mailbox/__init__.py`, 5). Name the Hook releases
+whose range includes X.Y.Z, and the protocol for 0.9.x. The CHANGELOG section says
+which Hook ranges keep working (for example "Hook clients that need `^1.5.0` keep
+working").
+
+Actions are pinned by commit, the base image and BuildKit by digest, `tzdata` and the
+test tools (`requirements-dev.txt`, hashed wheels) by exact version, each at least
+5 days old when pinned. Release script tests: `python3 -m pytest -q scripts/tests` and
+`scripts/verify-image.sh --self-test`.
+
+## Verifying an image
+
+Before you run a release, check it is the one this repository's workflow signed. You
+need Docker with buildx, [cosign](https://docs.sigstore.dev/cosign/system_config/installation/)
+and `jq`; no login.
+
+```
+scripts/verify-image.sh 1.15.0 --digest sha256:<digest from the release notes>
+```
+
+It resolves `ghcr.io/xooxoxxo/pond:1.15.0`, checks the digest matches the release notes,
+that the index holds both `linux/amd64` and `linux/arm64`, and that cosign verifies a
+signature on that digest from exactly this identity and issuer:
+
+```
+cosign verify ghcr.io/xooxoxxo/pond@sha256:<digest> \
+  --certificate-identity https://github.com/xooxoxxo/pond/.github/workflows/release.yml@refs/tags/v1.15.0 \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com
+```
+
+Then run it by digest, not by tag: set `MAILBOX_IMAGE=ghcr.io/xooxoxxo/pond@sha256:<digest>`
+in `.env` and `docker compose pull && docker compose up -d --no-build`.
+||||||| 769d8ef
+compare the shared vector files with Hook's; unset, that check is skipped. The
+`mailbox/tests/gen_*.py` generators rebuild the synthetic vector files.
