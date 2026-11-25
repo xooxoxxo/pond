@@ -1,0 +1,2248 @@
+{
+ "asks": [
+  [
+   "Ship the Atlas release",
+   "done"
+  ],
+  [
+   "edit fails",
+   "done"
+  ],
+  [
+   "fix the bug",
+   "done"
+  ],
+  [
+   "guarded ask",
+   "dismissed"
+  ],
+  [
+   "second ask",
+   "dismissed"
+  ],
+  [
+   "still open when the brief goes out",
+   "open"
+  ],
+  [
+   "third ask",
+   "done"
+  ]
+ ],
+ "config": [
+  [
+   "backup_dir",
+   "/backups"
+  ],
+  [
+   "context",
+   "personal"
+  ],
+  [
+   "ct_token",
+   null
+  ],
+  [
+   "ct_url",
+   null
+  ],
+  [
+   "data_dir",
+   "/data"
+  ],
+  [
+   "notify_token",
+   null
+  ],
+  [
+   "owner_id",
+   1
+  ],
+  [
+   "port",
+   8790
+  ],
+  [
+   "relay_open_base",
+   null
+  ],
+  [
+   "telegram_token",
+   "x"
+  ]
+ ],
+ "counters": {
+  "dropped": 7,
+  "ignored": 3
+ },
+ "ct": [
+  [
+   "POST",
+   "/api/items",
+   {
+    "anchor": {
+     "allDay": false,
+     "date": "2026-10-30",
+     "time": "10:00"
+    },
+    "title": "dentist"
+   }
+  ],
+  [
+   "POST",
+   "/api/reminders/fire-1/ack",
+   {
+    "action": "done"
+   }
+  ],
+  [
+   "POST",
+   "/api/reminders/fire-2/ack",
+   {
+    "action": "done"
+   }
+  ],
+  [
+   "POST",
+   "/api/reminders/fire-3/ack",
+   {
+    "action": "tomorrow"
+   }
+  ],
+  [
+   "POST",
+   "/api/items",
+   {
+    "anchor": {
+     "allDay": true,
+     "date": "2026-10-27"
+    },
+    "title": "buy milk"
+   }
+  ]
+ ],
+ "edit-error-events": [
+  [
+   "posted",
+   "session"
+  ],
+  [
+   "resolved",
+   "owner"
+  ],
+  [
+   "edit_failed",
+   "daemon"
+  ]
+ ],
+ "http": [
+  [
+   "ask",
+   [
+    201,
+    {
+     "editable": false,
+     "item": {
+      "anchor": null,
+      "completedAt": null,
+      "created": "<iso>",
+      "id": "<uuid-1>",
+      "lane": "personal",
+      "links": [],
+      "payload": {
+       "cmd": null,
+       "key": "2c52e8cc6ceb718b",
+       "link": null,
+       "note": null,
+       "tg_chat_id": 12345,
+       "tg_message_id": 1,
+       "why": null
+      },
+      "payloadType": "xo.ask",
+      "pinned": false,
+      "priority": 1,
+      "projectId": "Orbit",
+      "recurrence": null,
+      "rolling": false,
+      "snoozeUntil": null,
+      "source": "xo-mailbox",
+      "status": "open",
+      "title": "rotate the key",
+      "updated": "<iso>"
+     }
+    }
+   ]
+  ],
+  [
+   "ask-again",
+   [
+    200,
+    {
+     "deduped": true,
+     "editable": false,
+     "item": {
+      "anchor": null,
+      "completedAt": null,
+      "created": "<iso>",
+      "id": "<uuid-1>",
+      "lane": "personal",
+      "links": [],
+      "payload": {
+       "cmd": null,
+       "key": "2c52e8cc6ceb718b",
+       "link": null,
+       "note": null,
+       "tg_chat_id": 12345,
+       "tg_message_id": 1,
+       "why": null
+      },
+      "payloadType": "xo.ask",
+      "pinned": false,
+      "priority": 1,
+      "projectId": "Orbit",
+      "recurrence": null,
+      "rolling": false,
+      "snoozeUntil": null,
+      "source": "xo-mailbox",
+      "status": "open",
+      "title": "rotate the key",
+      "updated": "<iso>"
+     }
+    }
+   ]
+  ],
+  [
+   "asks",
+   [
+    200,
+    {
+     "items": [
+      {
+       "anchor": null,
+       "completedAt": null,
+       "created": "<iso>",
+       "id": "<uuid-1>",
+       "lane": "personal",
+       "links": [],
+       "payload": {
+        "cmd": null,
+        "key": "2c52e8cc6ceb718b",
+        "link": null,
+        "note": null,
+        "tg_chat_id": 12345,
+        "tg_message_id": 1,
+        "why": null
+       },
+       "payloadType": "xo.ask",
+       "pinned": false,
+       "priority": 1,
+       "projectId": "Orbit",
+       "recurrence": null,
+       "rolling": false,
+       "snoozeUntil": null,
+       "source": "xo-mailbox",
+       "status": "open",
+       "title": "rotate the key",
+       "updated": "<iso>"
+      }
+     ]
+    }
+   ]
+  ],
+  [
+   "notify",
+   [
+    201,
+    {
+     "deduped": false,
+     "id": "<uuid-2>"
+    }
+   ]
+  ],
+  [
+   "notify-again",
+   [
+    200,
+    {
+     "deduped": true,
+     "id": "<uuid-2>"
+    }
+   ]
+  ],
+  [
+   "notify-to",
+   [
+    400,
+    {
+     "details": [
+      "to: unknown key"
+     ],
+     "error": "invalid notification"
+    }
+   ]
+  ],
+  [
+   "ask-with-notify-token",
+   [
+    401,
+    {
+     "error": "unauthorized"
+    }
+   ]
+  ],
+  [
+   "health",
+   [
+    503,
+    [
+     "db_ok",
+     "last_poll_age_s",
+     "ok",
+     "telegram_ok"
+    ]
+   ]
+  ],
+  [
+   "answers",
+   [
+    200,
+    {
+     "item": {
+      "anchor": null,
+      "completedAt": null,
+      "created": "<iso>",
+      "id": "<uuid-3>",
+      "lane": "personal",
+      "links": [],
+      "payload": {
+       "cmd": null,
+       "instructable": {
+        "steps": [
+         {
+          "do": "Pick the deploy target",
+          "id": "s1",
+          "question": {
+           "choices": [
+            "Staging",
+            "Prod"
+           ],
+           "prompt": "Which environment?"
+          }
+         },
+         {
+          "do": "Choose what to watch",
+          "id": "s2",
+          "question": {
+           "choices": [
+            "Logs",
+            "Metrics",
+            "Traces"
+           ],
+           "multi": true,
+           "prompt": "Which signals?"
+          }
+         },
+         {
+          "do": "Name the region",
+          "id": "s3",
+          "question": {
+           "prompt": "Which region?"
+          }
+         },
+         {
+          "do": "Prepare the release",
+          "id": "s4",
+          "question": {
+           "choices": [
+            "Yes",
+            "No"
+           ],
+           "prompt": "Ship today?"
+          },
+          "substeps": [
+           {
+            "do": "Tag it",
+            "id": "s4.1"
+           },
+           {
+            "do": "Pick the notes",
+            "id": "s4.2",
+            "question": {
+             "choices": [
+              "Short",
+              "Long"
+             ],
+             "prompt": "Which notes?"
+            }
+           }
+          ]
+         },
+         {
+          "do": "Open the dashboard",
+          "id": "s5"
+         }
+        ],
+        "title": "Ship the Atlas release",
+        "urgency": "today",
+        "v": 1,
+        "verify": {
+         "do": "Check the dashboard"
+        }
+       },
+       "key": "6c25eb17f87c0185",
+       "link": null,
+       "note": null,
+       "tg_chat_id": 12345,
+       "tg_message_id": 3,
+       "why": null
+      },
+      "payloadType": "xo.ask",
+      "pinned": false,
+      "priority": 1,
+      "projectId": "Atlas",
+      "recurrence": null,
+      "rolling": false,
+      "snoozeUntil": null,
+      "source": "xo-mailbox",
+      "status": "open",
+      "title": "Ship the Atlas release",
+      "updated": "<iso>"
+     }
+    }
+   ]
+  ],
+  [
+   "answers-invalid",
+   [
+    400,
+    {
+     "details": [
+      "answers[1].step: no question at this step"
+     ],
+     "error": "invalid answers"
+    }
+   ]
+  ],
+  [
+   "answers-no-list",
+   [
+    400,
+    {
+     "error": "missing fields"
+    }
+   ]
+  ],
+  [
+   "answers-unknown",
+   [
+    404,
+    {
+     "error": "not found"
+    }
+   ]
+  ],
+  [
+   "answers-no-token",
+   [
+    401,
+    {
+     "error": "unauthorized"
+    }
+   ]
+  ],
+  [
+   "answers-notify-token",
+   [
+    401,
+    {
+     "error": "unauthorized"
+    }
+   ]
+  ],
+  [
+   "question-ask",
+   [
+    200,
+    {
+     "events": [
+      {
+       "actor": "session",
+       "at": "<iso>",
+       "auth": null,
+       "itemId": "<uuid-3>",
+       "kind": "posted",
+       "rev": null,
+       "seq": 2,
+       "text": null
+      },
+      {
+       "actor": "owner",
+       "at": "<iso>",
+       "auth": "token",
+       "itemId": "<uuid-3>",
+       "kind": "answer",
+       "rev": 1,
+       "seq": 3,
+       "text": "{\"step\":\"1\",\"id\":\"s1\",\"picked\":[\"Prod\"]}"
+      },
+      {
+       "actor": "owner",
+       "at": "<iso>",
+       "auth": "token",
+       "itemId": "<uuid-3>",
+       "kind": "answer",
+       "rev": 1,
+       "seq": 4,
+       "text": "{\"step\":\"3\",\"id\":\"s3\",\"text\":\"EU\"}"
+      }
+     ],
+     "item": {
+      "anchor": null,
+      "completedAt": null,
+      "created": "<iso>",
+      "id": "<uuid-3>",
+      "lane": "personal",
+      "links": [],
+      "payload": {
+       "cmd": null,
+       "instructable": {
+        "steps": [
+         {
+          "do": "Pick the deploy target",
+          "id": "s1",
+          "question": {
+           "choices": [
+            "Staging",
+            "Prod"
+           ],
+           "prompt": "Which environment?"
+          }
+         },
+         {
+          "do": "Choose what to watch",
+          "id": "s2",
+          "question": {
+           "choices": [
+            "Logs",
+            "Metrics",
+            "Traces"
+           ],
+           "multi": true,
+           "prompt": "Which signals?"
+          }
+         },
+         {
+          "do": "Name the region",
+          "id": "s3",
+          "question": {
+           "prompt": "Which region?"
+          }
+         },
+         {
+          "do": "Prepare the release",
+          "id": "s4",
+          "question": {
+           "choices": [
+            "Yes",
+            "No"
+           ],
+           "prompt": "Ship today?"
+          },
+          "substeps": [
+           {
+            "do": "Tag it",
+            "id": "s4.1"
+           },
+           {
+            "do": "Pick the notes",
+            "id": "s4.2",
+            "question": {
+             "choices": [
+              "Short",
+              "Long"
+             ],
+             "prompt": "Which notes?"
+            }
+           }
+          ]
+         },
+         {
+          "do": "Open the dashboard",
+          "id": "s5"
+         }
+        ],
+        "title": "Ship the Atlas release",
+        "urgency": "today",
+        "v": 1,
+        "verify": {
+         "do": "Check the dashboard"
+        }
+       },
+       "key": "6c25eb17f87c0185",
+       "link": null,
+       "note": null,
+       "tg_chat_id": 12345,
+       "tg_message_id": 3,
+       "why": null
+      },
+      "payloadType": "xo.ask",
+      "pinned": false,
+      "priority": 1,
+      "projectId": "Atlas",
+      "recurrence": null,
+      "rolling": false,
+      "snoozeUntil": null,
+      "source": "xo-mailbox",
+      "status": "open",
+      "title": "Ship the Atlas release",
+      "updated": "<iso>"
+     }
+    }
+   ]
+  ],
+  [
+   "events",
+   [
+    200,
+    {
+     "events": [
+      {
+       "actor": "session",
+       "at": "<iso>",
+       "auth": null,
+       "itemId": "<uuid-1>",
+       "kind": "posted",
+       "rev": null,
+       "seq": 1,
+       "text": null
+      },
+      {
+       "actor": "session",
+       "at": "<iso>",
+       "auth": null,
+       "itemId": "<uuid-3>",
+       "kind": "posted",
+       "rev": null,
+       "seq": 2,
+       "text": null
+      },
+      {
+       "actor": "owner",
+       "at": "<iso>",
+       "auth": "token",
+       "itemId": "<uuid-3>",
+       "kind": "answer",
+       "rev": 1,
+       "seq": 3,
+       "text": "{\"step\":\"1\",\"id\":\"s1\",\"picked\":[\"Prod\"]}"
+      },
+      {
+       "actor": "owner",
+       "at": "<iso>",
+       "auth": "token",
+       "itemId": "<uuid-3>",
+       "kind": "answer",
+       "rev": 1,
+       "seq": 4,
+       "text": "{\"step\":\"3\",\"id\":\"s3\",\"text\":\"EU\"}"
+      }
+     ],
+     "next": 4
+    }
+   ]
+  ],
+  [
+   "resolve",
+   [
+    200,
+    {
+     "item": {
+      "anchor": null,
+      "completedAt": "<iso>",
+      "created": "<iso>",
+      "id": "<uuid-3>",
+      "lane": "personal",
+      "links": [],
+      "payload": {
+       "cmd": null,
+       "instructable": {
+        "steps": [
+         {
+          "do": "Pick the deploy target",
+          "id": "s1",
+          "question": {
+           "choices": [
+            "Staging",
+            "Prod"
+           ],
+           "prompt": "Which environment?"
+          }
+         },
+         {
+          "do": "Choose what to watch",
+          "id": "s2",
+          "question": {
+           "choices": [
+            "Logs",
+            "Metrics",
+            "Traces"
+           ],
+           "multi": true,
+           "prompt": "Which signals?"
+          }
+         },
+         {
+          "do": "Name the region",
+          "id": "s3",
+          "question": {
+           "prompt": "Which region?"
+          }
+         },
+         {
+          "do": "Prepare the release",
+          "id": "s4",
+          "question": {
+           "choices": [
+            "Yes",
+            "No"
+           ],
+           "prompt": "Ship today?"
+          },
+          "substeps": [
+           {
+            "do": "Tag it",
+            "id": "s4.1"
+           },
+           {
+            "do": "Pick the notes",
+            "id": "s4.2",
+            "question": {
+             "choices": [
+              "Short",
+              "Long"
+             ],
+             "prompt": "Which notes?"
+            }
+           }
+          ]
+         },
+         {
+          "do": "Open the dashboard",
+          "id": "s5"
+         }
+        ],
+        "title": "Ship the Atlas release",
+        "urgency": "today",
+        "v": 1,
+        "verify": {
+         "do": "Check the dashboard"
+        }
+       },
+       "key": "6c25eb17f87c0185",
+       "link": null,
+       "note": null,
+       "tg_chat_id": 12345,
+       "tg_message_id": 3,
+       "why": null
+      },
+      "payloadType": "xo.ask",
+      "pinned": false,
+      "priority": 1,
+      "projectId": "Atlas",
+      "recurrence": null,
+      "rolling": false,
+      "snoozeUntil": null,
+      "source": "xo-mailbox",
+      "status": "done",
+      "title": "Ship the Atlas release",
+      "updated": "<iso>"
+     }
+    }
+   ]
+  ],
+  [
+   "answers-closed",
+   [
+    409,
+    {
+     "error": "ask is closed"
+    }
+   ]
+  ],
+  [
+   "reopen",
+   [
+    200,
+    {
+     "item": {
+      "anchor": null,
+      "completedAt": null,
+      "created": "<iso>",
+      "id": "<uuid-3>",
+      "lane": "personal",
+      "links": [],
+      "payload": {
+       "cmd": null,
+       "instructable": {
+        "steps": [
+         {
+          "do": "Pick the deploy target",
+          "id": "s1",
+          "question": {
+           "choices": [
+            "Staging",
+            "Prod"
+           ],
+           "prompt": "Which environment?"
+          }
+         },
+         {
+          "do": "Choose what to watch",
+          "id": "s2",
+          "question": {
+           "choices": [
+            "Logs",
+            "Metrics",
+            "Traces"
+           ],
+           "multi": true,
+           "prompt": "Which signals?"
+          }
+         },
+         {
+          "do": "Name the region",
+          "id": "s3",
+          "question": {
+           "prompt": "Which region?"
+          }
+         },
+         {
+          "do": "Prepare the release",
+          "id": "s4",
+          "question": {
+           "choices": [
+            "Yes",
+            "No"
+           ],
+           "prompt": "Ship today?"
+          },
+          "substeps": [
+           {
+            "do": "Tag it",
+            "id": "s4.1"
+           },
+           {
+            "do": "Pick the notes",
+            "id": "s4.2",
+            "question": {
+             "choices": [
+              "Short",
+              "Long"
+             ],
+             "prompt": "Which notes?"
+            }
+           }
+          ]
+         },
+         {
+          "do": "Open the dashboard",
+          "id": "s5"
+         }
+        ],
+        "title": "Ship the Atlas release",
+        "urgency": "today",
+        "v": 1,
+        "verify": {
+         "do": "Check the dashboard"
+        }
+       },
+       "key": "6c25eb17f87c0185",
+       "link": null,
+       "note": null,
+       "tg_chat_id": 12345,
+       "tg_message_id": 3,
+       "why": null
+      },
+      "payloadType": "xo.ask",
+      "pinned": false,
+      "priority": 1,
+      "projectId": "Atlas",
+      "recurrence": null,
+      "rolling": false,
+      "snoozeUntil": null,
+      "source": "xo-mailbox",
+      "status": "open",
+      "title": "Ship the Atlas release",
+      "updated": "<iso>"
+     }
+    }
+   ]
+  ],
+  [
+   "answers-reopened",
+   [
+    200,
+    {
+     "item": {
+      "anchor": null,
+      "completedAt": null,
+      "created": "<iso>",
+      "id": "<uuid-3>",
+      "lane": "personal",
+      "links": [],
+      "payload": {
+       "cmd": null,
+       "instructable": {
+        "steps": [
+         {
+          "do": "Pick the deploy target",
+          "id": "s1",
+          "question": {
+           "choices": [
+            "Staging",
+            "Prod"
+           ],
+           "prompt": "Which environment?"
+          }
+         },
+         {
+          "do": "Choose what to watch",
+          "id": "s2",
+          "question": {
+           "choices": [
+            "Logs",
+            "Metrics",
+            "Traces"
+           ],
+           "multi": true,
+           "prompt": "Which signals?"
+          }
+         },
+         {
+          "do": "Name the region",
+          "id": "s3",
+          "question": {
+           "prompt": "Which region?"
+          }
+         },
+         {
+          "do": "Prepare the release",
+          "id": "s4",
+          "question": {
+           "choices": [
+            "Yes",
+            "No"
+           ],
+           "prompt": "Ship today?"
+          },
+          "substeps": [
+           {
+            "do": "Tag it",
+            "id": "s4.1"
+           },
+           {
+            "do": "Pick the notes",
+            "id": "s4.2",
+            "question": {
+             "choices": [
+              "Short",
+              "Long"
+             ],
+             "prompt": "Which notes?"
+            }
+           }
+          ]
+         },
+         {
+          "do": "Open the dashboard",
+          "id": "s5"
+         }
+        ],
+        "title": "Ship the Atlas release",
+        "urgency": "today",
+        "v": 1,
+        "verify": {
+         "do": "Check the dashboard"
+        }
+       },
+       "key": "6c25eb17f87c0185",
+       "link": null,
+       "note": null,
+       "tg_chat_id": 12345,
+       "tg_message_id": 3,
+       "why": null
+      },
+      "payloadType": "xo.ask",
+      "pinned": false,
+      "priority": 1,
+      "projectId": "Atlas",
+      "recurrence": null,
+      "rolling": false,
+      "snoozeUntil": null,
+      "source": "xo-mailbox",
+      "status": "open",
+      "title": "Ship the Atlas release",
+      "updated": "<iso>"
+     }
+    }
+   ]
+  ],
+  [
+   "telegram",
+   [
+    [
+     "sendMessage",
+     {
+      "chat_id": 12345,
+      "link_preview_options": {
+       "is_disabled": true
+      },
+      "parse_mode": "HTML",
+      "reply_markup": {
+       "inline_keyboard": [
+        [
+         {
+          "callback_data": "d:<uuid-1>",
+          "text": "✅ Done"
+         },
+         {
+          "callback_data": "s:<uuid-1>",
+          "text": "🚫 Skip"
+         }
+        ]
+       ]
+      },
+      "text": "🙋 <b>Orbit</b> — rotate the key"
+     }
+    ],
+    [
+     "sendMessage",
+     {
+      "chat_id": 12345,
+      "link_preview_options": {
+       "is_disabled": true
+      },
+      "parse_mode": "HTML",
+      "reply_markup": {
+       "inline_keyboard": [
+        [
+         {
+          "callback_data": "r:<uuid-2>:done",
+          "text": "✅ Done"
+         }
+        ]
+       ]
+      },
+      "text": "⏰ <b>Call the bank</b>\ntoday 18:00"
+     }
+    ],
+    [
+     "sendMessage",
+     {
+      "chat_id": 12345,
+      "link_preview_options": {
+       "is_disabled": true
+      },
+      "parse_mode": "HTML",
+      "reply_markup": {
+       "inline_keyboard": [
+        [
+         {
+          "callback_data": "a:<uuid-3>:1:0",
+          "text": "1 · Staging"
+         },
+         {
+          "callback_data": "a:<uuid-3>:1:1",
+          "text": "Prod"
+         }
+        ],
+        [
+         {
+          "callback_data": "a:<uuid-3>:4:0",
+          "text": "4 · Yes"
+         },
+         {
+          "callback_data": "a:<uuid-3>:4:1",
+          "text": "No"
+         }
+        ],
+        [
+         {
+          "callback_data": "a:<uuid-3>:4.2:0",
+          "text": "4.2 · Short"
+         },
+         {
+          "callback_data": "a:<uuid-3>:4.2:1",
+          "text": "Long"
+         }
+        ],
+        [
+         {
+          "callback_data": "d:<uuid-3>",
+          "text": "✅ Done"
+         },
+         {
+          "callback_data": "s:<uuid-3>",
+          "text": "🚫 Skip"
+         }
+        ]
+       ]
+      },
+      "text": "🙋 <b>Atlas</b> — Ship the Atlas release\n1. Pick the deploy target\n   ❓ Which environment?\n2. Choose what to watch\n   ❓ Which signals?\n3. Name the region\n   ❓ Which region?\n4. Prepare the release\n   ❓ Ship today?\n   4a. Tag it\n   4b. Pick the notes\n      ❓ Which notes?\n5. Open the dashboard\nAnswer 2 more in Hook"
+     }
+    ],
+    [
+     "editMessageReplyMarkup",
+     {
+      "chat_id": 12345,
+      "message_id": 3,
+      "reply_markup": {
+       "inline_keyboard": [
+        [
+         {
+          "callback_data": "a:<uuid-3>:1:0",
+          "text": "1 · Staging"
+         },
+         {
+          "callback_data": "a:<uuid-3>:1:1",
+          "text": "✓ Prod"
+         }
+        ],
+        [
+         {
+          "callback_data": "a:<uuid-3>:4:0",
+          "text": "4 · Yes"
+         },
+         {
+          "callback_data": "a:<uuid-3>:4:1",
+          "text": "No"
+         }
+        ],
+        [
+         {
+          "callback_data": "a:<uuid-3>:4.2:0",
+          "text": "4.2 · Short"
+         },
+         {
+          "callback_data": "a:<uuid-3>:4.2:1",
+          "text": "Long"
+         }
+        ],
+        [
+         {
+          "callback_data": "d:<uuid-3>",
+          "text": "✅ Done"
+         },
+         {
+          "callback_data": "s:<uuid-3>",
+          "text": "🚫 Skip"
+         }
+        ]
+       ]
+      }
+     }
+    ],
+    [
+     "editMessageText",
+     {
+      "chat_id": 12345,
+      "link_preview_options": {
+       "is_disabled": true
+      },
+      "message_id": 3,
+      "parse_mode": "HTML",
+      "reply_markup": {
+       "inline_keyboard": []
+      },
+      "text": "✅ <s>Ship the Atlas release</s>\n<i>✅ done <stamp></i>"
+     }
+    ],
+    [
+     "editMessageText",
+     {
+      "chat_id": 12345,
+      "link_preview_options": {
+       "is_disabled": true
+      },
+      "message_id": 3,
+      "parse_mode": "HTML",
+      "reply_markup": {
+       "inline_keyboard": [
+        [
+         {
+          "callback_data": "a:<uuid-3>:1:0",
+          "text": "1 · Staging"
+         },
+         {
+          "callback_data": "a:<uuid-3>:1:1",
+          "text": "✓ Prod"
+         }
+        ],
+        [
+         {
+          "callback_data": "a:<uuid-3>:4:0",
+          "text": "4 · Yes"
+         },
+         {
+          "callback_data": "a:<uuid-3>:4:1",
+          "text": "No"
+         }
+        ],
+        [
+         {
+          "callback_data": "a:<uuid-3>:4.2:0",
+          "text": "4.2 · Short"
+         },
+         {
+          "callback_data": "a:<uuid-3>:4.2:1",
+          "text": "Long"
+         }
+        ],
+        [
+         {
+          "callback_data": "d:<uuid-3>",
+          "text": "✅ Done"
+         },
+         {
+          "callback_data": "s:<uuid-3>",
+          "text": "🚫 Skip"
+         }
+        ]
+       ]
+      },
+      "text": "🙋 <b>Atlas</b> — Ship the Atlas release\n1. Pick the deploy target\n   ❓ Which environment?\n2. Choose what to watch\n   ❓ Which signals?\n3. Name the region\n   ❓ Which region?\n4. Prepare the release\n   ❓ Ship today?\n   4a. Tag it\n   4b. Pick the notes\n      ❓ Which notes?\n5. Open the dashboard\nAnswer 2 more in Hook"
+     }
+    ],
+    [
+     "editMessageReplyMarkup",
+     {
+      "chat_id": 12345,
+      "message_id": 3,
+      "reply_markup": {
+       "inline_keyboard": [
+        [
+         {
+          "callback_data": "a:<uuid-3>:1:0",
+          "text": "1 · ✓ Staging"
+         },
+         {
+          "callback_data": "a:<uuid-3>:1:1",
+          "text": "Prod"
+         }
+        ],
+        [
+         {
+          "callback_data": "a:<uuid-3>:4:0",
+          "text": "4 · Yes"
+         },
+         {
+          "callback_data": "a:<uuid-3>:4:1",
+          "text": "No"
+         }
+        ],
+        [
+         {
+          "callback_data": "a:<uuid-3>:4.2:0",
+          "text": "4.2 · Short"
+         },
+         {
+          "callback_data": "a:<uuid-3>:4.2:1",
+          "text": "Long"
+         }
+        ],
+        [
+         {
+          "callback_data": "d:<uuid-3>",
+          "text": "✅ Done"
+         },
+         {
+          "callback_data": "s:<uuid-3>",
+          "text": "🚫 Skip"
+         }
+        ]
+       ]
+      }
+     }
+    ]
+   ]
+  ],
+  [
+   "edited_markups",
+   [
+    {
+     "chat_id": 12345,
+     "message_id": 3,
+     "reply_markup": {
+      "inline_keyboard": [
+       [
+        {
+         "callback_data": "a:<uuid-3>:1:0",
+         "text": "1 · Staging"
+        },
+        {
+         "callback_data": "a:<uuid-3>:1:1",
+         "text": "✓ Prod"
+        }
+       ],
+       [
+        {
+         "callback_data": "a:<uuid-3>:4:0",
+         "text": "4 · Yes"
+        },
+        {
+         "callback_data": "a:<uuid-3>:4:1",
+         "text": "No"
+        }
+       ],
+       [
+        {
+         "callback_data": "a:<uuid-3>:4.2:0",
+         "text": "4.2 · Short"
+        },
+        {
+         "callback_data": "a:<uuid-3>:4.2:1",
+         "text": "Long"
+        }
+       ],
+       [
+        {
+         "callback_data": "d:<uuid-3>",
+         "text": "✅ Done"
+        },
+        {
+         "callback_data": "s:<uuid-3>",
+         "text": "🚫 Skip"
+        }
+       ]
+      ]
+     }
+    },
+    {
+     "chat_id": 12345,
+     "message_id": 3,
+     "reply_markup": {
+      "inline_keyboard": [
+       [
+        {
+         "callback_data": "a:<uuid-3>:1:0",
+         "text": "1 · ✓ Staging"
+        },
+        {
+         "callback_data": "a:<uuid-3>:1:1",
+         "text": "Prod"
+        }
+       ],
+       [
+        {
+         "callback_data": "a:<uuid-3>:4:0",
+         "text": "4 · Yes"
+        },
+        {
+         "callback_data": "a:<uuid-3>:4:1",
+         "text": "No"
+        }
+       ],
+       [
+        {
+         "callback_data": "a:<uuid-3>:4.2:0",
+         "text": "4.2 · Short"
+        },
+        {
+         "callback_data": "a:<uuid-3>:4.2:1",
+         "text": "Long"
+        }
+       ],
+       [
+        {
+         "callback_data": "d:<uuid-3>",
+         "text": "✅ Done"
+        },
+        {
+         "callback_data": "s:<uuid-3>",
+         "text": "🚫 Skip"
+        }
+       ]
+      ]
+     }
+    }
+   ]
+  ],
+  [
+   "ask-relay",
+   [
+    201,
+    {
+     "editable": false,
+     "item": {
+      "anchor": null,
+      "completedAt": null,
+      "created": "<iso>",
+      "id": "<uuid-4>",
+      "lane": "personal",
+      "links": [],
+      "payload": {
+       "cmd": null,
+       "key": "2c52e8cc6ceb718b",
+       "link": null,
+       "note": null,
+       "tg_chat_id": 12345,
+       "tg_message_id": 1,
+       "why": null
+      },
+      "payloadType": "xo.ask",
+      "pinned": false,
+      "priority": 1,
+      "projectId": "Orbit",
+      "recurrence": null,
+      "rolling": false,
+      "snoozeUntil": null,
+      "source": "xo-mailbox",
+      "status": "open",
+      "title": "rotate the key",
+      "updated": "<iso>"
+     },
+     "openUrl": "http://127.0.0.1:47823/i/<uuid-4>"
+    }
+   ]
+  ],
+  [
+   "telegram-relay",
+   [
+    [
+     "sendMessage",
+     {
+      "chat_id": 12345,
+      "link_preview_options": {
+       "is_disabled": true
+      },
+      "parse_mode": "HTML",
+      "reply_markup": {
+       "inline_keyboard": [
+        [
+         {
+          "callback_data": "d:<uuid-4>",
+          "text": "✅ Done"
+         },
+         {
+          "callback_data": "s:<uuid-4>",
+          "text": "🚫 Skip"
+         }
+        ],
+        [
+         {
+          "text": "📋 Open in Hook",
+          "url": "http://127.0.0.1:47823/i/<uuid-4>"
+         }
+        ]
+       ]
+      },
+      "text": "🙋 <b>Orbit</b> — rotate the key"
+     }
+    ]
+   ]
+  ]
+ ],
+ "log": [
+  "INFO [mailbox] capture: item created",
+  "WARNING [mailbox] reminder ack failed: ack 409 closed",
+  "WARNING [mailbox] capture failed: create 500"
+ ],
+ "notifications": [
+  "done",
+  "closed"
+ ],
+ "question-events": [
+  [
+   "posted",
+   "session",
+   null
+  ],
+  [
+   "answer",
+   "owner",
+   "{\"step\":\"1\",\"id\":\"s1\",\"picked\":[\"Prod\"]}"
+  ],
+  [
+   "answer",
+   "owner",
+   "{\"step\":\"1\",\"id\":\"s1\",\"picked\":[\"Staging\"]}"
+  ],
+  [
+   "answer",
+   "owner",
+   "{\"step\":\"3\",\"id\":\"s3\",\"text\":\"EU\"}"
+  ],
+  [
+   "resolved",
+   "owner",
+   null
+  ]
+ ],
+ "send-error": "TelegramError",
+ "startup": {
+  "health": [
+   200,
+   {
+    "db_ok": true,
+    "ok": true,
+    "telegram_ok": true
+   }
+  ],
+  "lines": [
+   "INFO [mailbox] mailbox-token generated",
+   "INFO [mailbox] poll thread started",
+   "INFO [mailbox] backup thread started (nightly 03:20 local)",
+   "INFO [mailbox] capture: enabled, notify: enabled (tz Europe/Amsterdam <offset>)",
+   "INFO [mailbox] listening on http://127.0.0.1:<port>"
+  ]
+ },
+ "stranger": {
+  "after": [
+   "open",
+   [
+    "posted"
+   ],
+   null,
+   3
+  ],
+  "before": [
+   "open",
+   [
+    "posted"
+   ],
+   null,
+   3
+  ]
+ },
+ "telegram": [
+  [
+   "sendMessage",
+   {
+    "chat_id": 12345,
+    "link_preview_options": {
+     "is_disabled": true
+    },
+    "parse_mode": "HTML",
+    "reply_markup": {
+     "inline_keyboard": [
+      [
+       {
+        "callback_data": "d:<uuid-5>",
+        "text": "✅ Done"
+       },
+       {
+        "callback_data": "s:<uuid-5>",
+        "text": "🚫 Skip"
+       }
+      ]
+     ]
+    },
+    "text": "🙋 <b>Orbit</b> — fix the bug\n<i>why:</i> slow\n<pre>pytest</pre>"
+   }
+  ],
+  [
+   "sendMessage",
+   {
+    "chat_id": 12345,
+    "link_preview_options": {
+     "is_disabled": true
+    },
+    "parse_mode": "HTML",
+    "reply_markup": {
+     "inline_keyboard": [
+      [
+       {
+        "callback_data": "d:<uuid-6>",
+        "text": "✅ Done"
+       },
+       {
+        "callback_data": "s:<uuid-6>",
+        "text": "🚫 Skip"
+       }
+      ]
+     ]
+    },
+    "text": "🙋 <b>Orbit</b> — second ask"
+   }
+  ],
+  [
+   "sendMessage",
+   {
+    "chat_id": 12345,
+    "link_preview_options": {
+     "is_disabled": true
+    },
+    "parse_mode": "HTML",
+    "reply_markup": {
+     "inline_keyboard": [
+      [
+       {
+        "callback_data": "d:<uuid-7>",
+        "text": "✅ Done"
+       },
+       {
+        "callback_data": "s:<uuid-7>",
+        "text": "🚫 Skip"
+       }
+      ]
+     ]
+    },
+    "text": "🙋 <b>Orbit</b> — third ask"
+   }
+  ],
+  [
+   "editMessageText",
+   {
+    "chat_id": 12345,
+    "link_preview_options": {
+     "is_disabled": true
+    },
+    "message_id": 1,
+    "parse_mode": "HTML",
+    "reply_markup": {
+     "inline_keyboard": []
+    },
+    "text": "✅ <s>fix the bug</s>\n<i>✅ done <stamp></i>"
+   }
+  ],
+  [
+   "answerCallbackQuery",
+   {
+    "callback_query_id": "cb1",
+    "show_alert": false,
+    "text": "Done"
+   }
+  ],
+  [
+   "editMessageText",
+   {
+    "chat_id": 12345,
+    "link_preview_options": {
+     "is_disabled": true
+    },
+    "message_id": 2,
+    "parse_mode": "HTML",
+    "reply_markup": {
+     "inline_keyboard": []
+    },
+    "text": "✅ <s>second ask</s>\n<i>🚫 skipped <stamp></i>"
+   }
+  ],
+  [
+   "answerCallbackQuery",
+   {
+    "callback_query_id": "cb2",
+    "show_alert": false,
+    "text": "Skipped"
+   }
+  ],
+  [
+   "editMessageText",
+   {
+    "chat_id": 12345,
+    "link_preview_options": {
+     "is_disabled": true
+    },
+    "message_id": 3,
+    "parse_mode": "HTML",
+    "reply_markup": {
+     "inline_keyboard": []
+    },
+    "text": "✅ <s>third ask</s>\n<i>✅ done <stamp> — done, fixed it</i>"
+   }
+  ],
+  [
+   "sendMessage",
+   {
+    "chat_id": 12345,
+    "link_preview_options": {
+     "is_disabled": true
+    },
+    "parse_mode": "HTML",
+    "reply_to_message_id": 105,
+    "text": "Added: <b>dentist</b> · Fri 30 Oct 10:00"
+   }
+  ],
+  [
+   "sendMessage",
+   {
+    "chat_id": 12345,
+    "link_preview_options": {
+     "is_disabled": true
+    },
+    "parse_mode": "HTML",
+    "reply_markup": {
+     "inline_keyboard": [
+      [
+       {
+        "callback_data": "d:<uuid-8>",
+        "text": "✅ Done"
+       },
+       {
+        "callback_data": "s:<uuid-8>",
+        "text": "🚫 Skip"
+       }
+      ]
+     ]
+    },
+    "text": "🙋 <b>Orbit</b> — still open when the brief goes out"
+   }
+  ],
+  [
+   "sendMessage",
+   {
+    "chat_id": 12345,
+    "link_preview_options": {
+     "is_disabled": true
+    },
+    "parse_mode": "HTML",
+    "reply_markup": {
+     "inline_keyboard": [
+      [
+       {
+        "callback_data": "r:<uuid-9>:done",
+        "text": "✅ Done"
+       },
+       {
+        "callback_data": "r:<uuid-9>:tomorrow",
+        "text": "⏭ Tomorrow"
+       }
+      ]
+     ]
+    },
+    "text": "⏰ <b>Call the bank</b>\ntoday 18:00"
+   }
+  ],
+  [
+   "sendMessage",
+   {
+    "chat_id": 12345,
+    "link_preview_options": {
+     "is_disabled": true
+    },
+    "parse_mode": "HTML",
+    "reply_markup": null,
+    "text": "☀️ <b>Mon 26 Oct</b>\nToday (1): Call the bank\nOpen asks: 1"
+   }
+  ],
+  [
+   "sendMessage",
+   {
+    "chat_id": 12345,
+    "link_preview_options": {
+     "is_disabled": true
+    },
+    "parse_mode": "HTML",
+    "reply_markup": {
+     "inline_keyboard": [
+      [
+       {
+        "callback_data": "r:<uuid-10>:done",
+        "text": "✅ Done"
+       }
+      ]
+     ]
+    },
+    "text": "⏰ <b>Pay rent</b>\ntoday 19:00"
+   }
+  ],
+  [
+   "editMessageText",
+   {
+    "chat_id": 12345,
+    "link_preview_options": {
+     "is_disabled": true
+    },
+    "message_id": 6,
+    "parse_mode": "HTML",
+    "reply_markup": {
+     "inline_keyboard": []
+    },
+    "text": "✅ <s>Call the bank</s>"
+   }
+  ],
+  [
+   "answerCallbackQuery",
+   {
+    "callback_query_id": "cb9",
+    "show_alert": false,
+    "text": "Done"
+   }
+  ],
+  [
+   "answerCallbackQuery",
+   {
+    "callback_query_id": "cb10",
+    "show_alert": false,
+    "text": "Already handled"
+   }
+  ],
+  [
+   "editMessageText",
+   {
+    "chat_id": 12345,
+    "link_preview_options": {
+     "is_disabled": true
+    },
+    "message_id": 8,
+    "parse_mode": "HTML",
+    "reply_markup": {
+     "inline_keyboard": []
+    },
+    "text": "✅ <s>Pay rent</s>\n<i>already closed in Central Time</i>"
+   }
+  ],
+  [
+   "answerCallbackQuery",
+   {
+    "callback_query_id": "cb11",
+    "show_alert": false,
+    "text": "Already closed in Central Time"
+   }
+  ],
+  [
+   "answerCallbackQuery",
+   {
+    "callback_query_id": "cb12",
+    "show_alert": false,
+    "text": "Ignored"
+   }
+  ],
+  [
+   "sendMessage",
+   {
+    "chat_id": 12345,
+    "link_preview_options": {
+     "is_disabled": true
+    },
+    "parse_mode": "HTML",
+    "reply_markup": {
+     "inline_keyboard": [
+      [
+       {
+        "callback_data": "a:<uuid-11>:1:0",
+        "text": "1 · Staging"
+       },
+       {
+        "callback_data": "a:<uuid-11>:1:1",
+        "text": "Prod"
+       }
+      ],
+      [
+       {
+        "callback_data": "a:<uuid-11>:4:0",
+        "text": "4 · Yes"
+       },
+       {
+        "callback_data": "a:<uuid-11>:4:1",
+        "text": "No"
+       }
+      ],
+      [
+       {
+        "callback_data": "a:<uuid-11>:4.2:0",
+        "text": "4.2 · Short"
+       },
+       {
+        "callback_data": "a:<uuid-11>:4.2:1",
+        "text": "Long"
+       }
+      ],
+      [
+       {
+        "callback_data": "d:<uuid-11>",
+        "text": "✅ Done"
+       },
+       {
+        "callback_data": "s:<uuid-11>",
+        "text": "🚫 Skip"
+       }
+      ]
+     ]
+    },
+    "text": "🙋 <b>Atlas</b> — Ship the Atlas release\n1. Pick the deploy target\n   ❓ Which environment?\n2. Choose what to watch\n   ❓ Which signals?\n3. Name the region\n   ❓ Which region?\n4. Prepare the release\n   ❓ Ship today?\n   4a. Tag it\n   4b. Pick the notes\n      ❓ Which notes?\n5. Open the dashboard\nAnswer 2 more in Hook"
+   }
+  ],
+  [
+   "editMessageReplyMarkup",
+   {
+    "chat_id": 12345,
+    "message_id": 9,
+    "reply_markup": {
+     "inline_keyboard": [
+      [
+       {
+        "callback_data": "a:<uuid-11>:1:0",
+        "text": "1 · Staging"
+       },
+       {
+        "callback_data": "a:<uuid-11>:1:1",
+        "text": "✓ Prod"
+       }
+      ],
+      [
+       {
+        "callback_data": "a:<uuid-11>:4:0",
+        "text": "4 · Yes"
+       },
+       {
+        "callback_data": "a:<uuid-11>:4:1",
+        "text": "No"
+       }
+      ],
+      [
+       {
+        "callback_data": "a:<uuid-11>:4.2:0",
+        "text": "4.2 · Short"
+       },
+       {
+        "callback_data": "a:<uuid-11>:4.2:1",
+        "text": "Long"
+       }
+      ],
+      [
+       {
+        "callback_data": "d:<uuid-11>",
+        "text": "✅ Done"
+       },
+       {
+        "callback_data": "s:<uuid-11>",
+        "text": "🚫 Skip"
+       }
+      ]
+     ]
+    }
+   }
+  ],
+  [
+   "answerCallbackQuery",
+   {
+    "callback_query_id": "cb13",
+    "show_alert": false,
+    "text": "1: Prod"
+   }
+  ],
+  [
+   "answerCallbackQuery",
+   {
+    "callback_query_id": "cb14",
+    "show_alert": false,
+    "text": "1: Prod"
+   }
+  ],
+  [
+   "editMessageReplyMarkup",
+   {
+    "chat_id": 12345,
+    "message_id": 9,
+    "reply_markup": {
+     "inline_keyboard": [
+      [
+       {
+        "callback_data": "a:<uuid-11>:1:0",
+        "text": "1 · ✓ Staging"
+       },
+       {
+        "callback_data": "a:<uuid-11>:1:1",
+        "text": "Prod"
+       }
+      ],
+      [
+       {
+        "callback_data": "a:<uuid-11>:4:0",
+        "text": "4 · Yes"
+       },
+       {
+        "callback_data": "a:<uuid-11>:4:1",
+        "text": "No"
+       }
+      ],
+      [
+       {
+        "callback_data": "a:<uuid-11>:4.2:0",
+        "text": "4.2 · Short"
+       },
+       {
+        "callback_data": "a:<uuid-11>:4.2:1",
+        "text": "Long"
+       }
+      ],
+      [
+       {
+        "callback_data": "d:<uuid-11>",
+        "text": "✅ Done"
+       },
+       {
+        "callback_data": "s:<uuid-11>",
+        "text": "🚫 Skip"
+       }
+      ]
+     ]
+    }
+   }
+  ],
+  [
+   "answerCallbackQuery",
+   {
+    "callback_query_id": "cb15",
+    "show_alert": false,
+    "text": "1: Staging"
+   }
+  ],
+  [
+   "answerCallbackQuery",
+   {
+    "callback_query_id": "cb16",
+    "show_alert": false,
+    "text": "That choice is gone"
+   }
+  ],
+  [
+   "editMessageReplyMarkup",
+   {
+    "chat_id": 12345,
+    "message_id": 9,
+    "reply_markup": {
+     "inline_keyboard": [
+      [
+       {
+        "callback_data": "a:<uuid-11>:1:0",
+        "text": "1 · ✓ Staging"
+       },
+       {
+        "callback_data": "a:<uuid-11>:1:1",
+        "text": "Prod"
+       }
+      ],
+      [
+       {
+        "callback_data": "a:<uuid-11>:4:0",
+        "text": "4 · Yes"
+       },
+       {
+        "callback_data": "a:<uuid-11>:4:1",
+        "text": "No"
+       }
+      ],
+      [
+       {
+        "callback_data": "a:<uuid-11>:4.2:0",
+        "text": "4.2 · Short"
+       },
+       {
+        "callback_data": "a:<uuid-11>:4.2:1",
+        "text": "Long"
+       }
+      ],
+      [
+       {
+        "callback_data": "d:<uuid-11>",
+        "text": "✅ Done"
+       },
+       {
+        "callback_data": "s:<uuid-11>",
+        "text": "🚫 Skip"
+       }
+      ]
+     ]
+    }
+   }
+  ],
+  [
+   "answerCallbackQuery",
+   {
+    "callback_query_id": "cb18",
+    "show_alert": false,
+    "text": "This ask is closed"
+   }
+  ],
+  [
+   "editMessageText",
+   {
+    "chat_id": 12345,
+    "link_preview_options": {
+     "is_disabled": true
+    },
+    "message_id": 9,
+    "parse_mode": "HTML",
+    "reply_markup": {
+     "inline_keyboard": []
+    },
+    "text": "✅ <s>Ship the Atlas release</s>\n<i>✅ done <stamp></i>"
+   }
+  ],
+  [
+   "answerCallbackQuery",
+   {
+    "callback_query_id": "cb19",
+    "show_alert": false,
+    "text": "Done"
+   }
+  ],
+  [
+   "answerCallbackQuery",
+   {
+    "callback_query_id": "cb20",
+    "show_alert": false,
+    "text": "This ask is closed"
+   }
+  ],
+  [
+   "sendMessage",
+   {
+    "chat_id": 12345,
+    "link_preview_options": {
+     "is_disabled": true
+    },
+    "parse_mode": "HTML",
+    "reply_markup": {
+     "inline_keyboard": [
+      [
+       {
+        "callback_data": "d:<uuid-12>",
+        "text": "✅ Done"
+       },
+       {
+        "callback_data": "s:<uuid-12>",
+        "text": "🚫 Skip"
+       }
+      ]
+     ]
+    },
+    "text": "🙋 <b>Orbit</b> — guarded ask"
+   }
+  ],
+  [
+   "sendMessage",
+   {
+    "chat_id": 12345,
+    "link_preview_options": {
+     "is_disabled": true
+    },
+    "parse_mode": "HTML",
+    "reply_markup": {
+     "inline_keyboard": [
+      [
+       {
+        "callback_data": "r:<uuid-13>:done",
+        "text": "Done"
+       },
+       {
+        "callback_data": "r:<uuid-13>:tomorrow",
+        "text": "Tomorrow"
+       }
+      ]
+     ]
+    },
+    "text": "⏰ <b>Water plants</b>\ntoday 20:00"
+   }
+  ],
+  [
+   "editMessageText",
+   {
+    "chat_id": 12345,
+    "link_preview_options": {
+     "is_disabled": true
+    },
+    "message_id": 11,
+    "parse_mode": "HTML",
+    "reply_markup": {
+     "inline_keyboard": []
+    },
+    "text": "⏭ <s>Water plants</s>\n<i>moved to tomorrow</i>"
+   }
+  ],
+  [
+   "answerCallbackQuery",
+   {
+    "callback_query_id": "cb28",
+    "show_alert": false,
+    "text": "Moved to tomorrow"
+   }
+  ],
+  [
+   "editMessageText",
+   {
+    "chat_id": 12345,
+    "link_preview_options": {
+     "is_disabled": true
+    },
+    "message_id": 10,
+    "parse_mode": "HTML",
+    "reply_markup": {
+     "inline_keyboard": []
+    },
+    "text": "✅ <s>guarded ask</s>\n<i>🚫 skipped <stamp> — skip this one</i>"
+   }
+  ],
+  [
+   "sendMessage",
+   {
+    "chat_id": 12345,
+    "link_preview_options": {
+     "is_disabled": true
+    },
+    "parse_mode": "HTML",
+    "reply_to_message_id": 131,
+    "text": "Not saved: Central Time did not answer. Send it again in a minute."
+   }
+  ],
+  [
+   "sendMessage",
+   {
+    "chat_id": 12345,
+    "link_preview_options": {
+     "is_disabled": true
+    },
+    "parse_mode": "HTML",
+    "reply_markup": {
+     "inline_keyboard": [
+      [
+       {
+        "callback_data": "d:<uuid-14>",
+        "text": "✅ Done"
+       },
+       {
+        "callback_data": "s:<uuid-14>",
+        "text": "🚫 Skip"
+       }
+      ]
+     ]
+    },
+    "text": "🙋 <b>Orbit</b> — edit fails"
+   }
+  ],
+  [
+   "answerCallbackQuery",
+   {
+    "callback_query_id": "cb32",
+    "show_alert": false,
+    "text": "Done"
+   }
+  ]
+ ],
+ "validate": [
+  [
+   {},
+   [
+    "to: unknown key"
+   ]
+  ],
+  [
+   {},
+   [
+    "actions[0].id: must be one of done, tomorrow"
+   ]
+  ],
+  [
+   {
+    "actions": [],
+    "body": "b",
+    "kind": "brief",
+    "ref": "b1",
+    "title": "t"
+   },
+   []
+  ]
+ ]
+}

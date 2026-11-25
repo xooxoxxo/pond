@@ -1,0 +1,10 @@
+# The Dockerfile copies named runtime files only; this keeps everything else out of the build context.
+.env
+.env.*
+backups/
+tests/
+__pycache__/
+*.pyc
+compose.yaml
+README.md
+prepare-host.sh

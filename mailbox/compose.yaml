@@ -1,0 +1,29 @@
+name: mailbox
+
+services:
+  mailbox:
+    build: .
+    image: ${MAILBOX_IMAGE:-pond:local}
+    restart: unless-stopped
+    ports: ["${MAILBOX_HOST_PORT:-8790}:8790"]
+    env_file: .env
+    environment:
+      TZ: ${TZ:?TZ must be set in .env}
+      MAILBOX_DATA_DIR: /data
+      MAILBOX_BACKUP_DIR: /backups
+    volumes:
+      - mailbox-data:/data
+      - ./backups:/backups
+    # Optional Central Time integration: when it runs on the same host (port 8787), the daemon reaches it through
+    # host.docker.internal. host-gateway is the docker bridge address of the host; set MAILBOX_HOST_GATEWAY to
+    # the host's LAN address in .env if a firewall filters that route.
+    extra_hosts:
+      - "host.docker.internal:${MAILBOX_HOST_GATEWAY:-host-gateway}"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8790/health"]
+      interval: 30s
+      timeout: 3s
+      start_period: 90s   # /health is 503 until the first successful Telegram poll
+
+volumes:
+  mailbox-data:
