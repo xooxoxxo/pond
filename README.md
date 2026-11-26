@@ -114,7 +114,7 @@ All endpoints except public `GET /health` and `GET /i/<uuid>` require
 |---|---|---|---|
 | `GET` | `/health` | liveness probe, no auth | `200` healthy, `503` unhealthy |
 | `GET` | `/i/<uuid>` | public fixed Hook launch page; validates only the UUID, never reads an ask | `200` HTML, `404` |
-| `GET` | `/version` | `{"service": "pond", "version": "1.15.0", "protocol": 5, "features": ["answers", …, "appendSteps", "ownerRevokeRequest", "ownerKeyDates", "fields", "brief", "longAnswers", "docs", "askAbout"]}`; Hook checks `version` against the range it needs, 0.9.x compares `protocol`; a client gates a new feature on its name in `features` (1.8.0), never on the version | `200`, `401` |
+| `GET` | `/version` | `{"service": "pond", "version": "1.15.1", "protocol": 5, "features": ["answers", …, "appendSteps", "ownerRevokeRequest", "ownerKeyDates", "fields", "brief", "longAnswers", "docs", "askAbout"]}`; Hook checks `version` against the range it needs, 0.9.x compares `protocol`; a client gates a new feature on its name in `features` (1.8.0), never on the version | `200`, `401` |
 | `POST` | `/asks` | post an ask (deduped by payload key within 24h); optional `instructable` (Hook instructable v1, see `instructable.py`), `ask` then defaults to its title; its steps get ids (`s1`, `s3.1`) unless every step has one (an id may not read as a step number such as `2` or `3.1`), and it becomes revision 1. Optional `editKeyHash` (64 lowercase hex, the SHA-256 of the poster's edit key). The response carries `revision` `{rev, hash}` and `editable` (true only for the stored hash, also on a dedupe hit). Optional `docs` (1.10.0, see Documents below) | `201` created, `200` deduped, `400` missing fields, `invalid editKeyHash` or `{"error": "invalid instructable", "details": [...]}`, `403` wrong context, `409` documents not enabled, `400` `{"error": "invalid documents", "details": [...]}`, `409` document store full (1.12.0), `502` Telegram send failed |
 | `POST` | `/asks` with `kind: "bug"` | a Hook bug (1.2.0): `{project, context, kind: "bug", signature, instructable}`, owner key always, never sent to Telegram. Deduped by `signature` (12 lowercase hex) while a bug with it is open: the repeat adds an occurrence. The item carries `kind: "bug"` and `bug` `{signature, count, firstSeen, lastSeen}`. A bug takes no documents (1.10.0): a `doc` or a `docs` member is refused as for an ask, `409` documents not enabled or `400` invalid documents | `201` `{"item", "occurrences": 1}`, `200` `{"item", "deduped": true, "occurrences": n}`, `400` invalid kind, invalid signature, missing fields or invalid instructable, `403` owner key required, unknown owner key or wrong context |
 | `GET` | `/asks?status=open&days=14&kind=bug` | list asks; `kind` (1.2.0) is `bug` or `ask`, absent for both | `200`, `400` invalid query |
@@ -575,16 +575,16 @@ need Docker with buildx, [cosign](https://docs.sigstore.dev/cosign/system_config
 and `jq`; no login.
 
 ```
-scripts/verify-image.sh 1.15.0 --digest sha256:<digest from the release notes>
+scripts/verify-image.sh 1.15.1 --digest sha256:<digest from the release notes>
 ```
 
-It resolves `ghcr.io/xooxoxxo/pond:1.15.0`, checks the digest matches the release notes,
+It resolves `ghcr.io/xooxoxxo/pond:1.15.1`, checks the digest matches the release notes,
 that the index holds both `linux/amd64` and `linux/arm64`, and that cosign verifies a
 signature on that digest from exactly this identity and issuer:
 
 ```
 cosign verify ghcr.io/xooxoxxo/pond@sha256:<digest> \
-  --certificate-identity https://github.com/xooxoxxo/pond/.github/workflows/release.yml@refs/tags/v1.15.0 \
+  --certificate-identity https://github.com/xooxoxxo/pond/.github/workflows/release.yml@refs/tags/v1.15.1 \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com
 ```
 

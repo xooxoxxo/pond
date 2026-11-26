@@ -13,6 +13,26 @@ workflow refuses a tag without one (`scripts/check-release.py`). A release is pu
 as the signed image `ghcr.io/xooxoxxo/pond:X.Y.Z` (README, "Releasing" and "Verifying an
 image").
 
+## 1.15.1
+
+Backwards compatible: `protocol` stays 5, and Hook clients that need `^1.5.0`
+keep working. No migration: schema 5 is unchanged. No new feature name in
+`features`. No new dependency. The wire format is unchanged.
+
+- The Central Time adapter's ack paths (`/api/reminders/<id>/ack` and
+  `/api/hh/deliveries/<id>/ack`) no longer take the stored notification ref as is.
+  An empty, `.` or `..` id is refused before any request is sent, and the rest is
+  percent-encoded as one path segment (`:` kept), so `/`, `?`, `#` and `%` in an id
+  can't change the path. Every ref a notification allows goes out byte-identical.
+- A notification's `ref` must match the whole rule (1 to 64 letters, digits,
+  colon, dot, dash or underscore): a ref with a trailing newline was accepted
+  before and is now refused with the same error as any other bad ref.
+- The first release from the public repository, published as the signed
+  two-platform image (`linux/amd64` and `linux/arm64`) described under
+  "Releasing" and "Verifying an image" in the README.
+- The vector files stamped with the Pond's release (history, progress,
+  strict-JSON, append, document and phone) name 1.15.1. No case changed.
+
 ## 1.15.0
 
 Backwards compatible: `protocol` stays 5, and Hook clients that need `^1.5.0`
