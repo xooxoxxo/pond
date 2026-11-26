@@ -311,7 +311,7 @@ def test_version_reports_service_version_and_protocol(server):
     status, data = call(base_url, "/version", token=token)
     from mailbox import FEATURES
     assert status == 200
-    assert data == {"service": "pond", "version": "1.15.0", "protocol": 5, "features": list(FEATURES)}
+    assert data == {"service": "pond", "version": "1.15.1", "protocol": 5, "features": list(FEATURES)}
 
 
 def test_version_lists_features(server):
@@ -345,10 +345,10 @@ def test_the_version_is_strict_semver_with_a_changelog_entry():
 
 def test_version_150_retains_140_compatibility():
     """Pond 1.4.0 adds choice objects and 8000-character owner text without breaking a
-    1.3.0 client: the version is 1.15.0, the protocol integer stays 5 and the schema
+    1.3.0 client: the version is 1.15.1, the protocol integer stays 5 and the schema
     is 5 (1.11.0's owner key dates; 1.4.0 itself needed no migration)."""
     from mailbox import PROTOCOL, VERSION, migrations
-    assert (VERSION, PROTOCOL, migrations.SCHEMA_VERSION) == ("1.15.0", 5, 5)
+    assert (VERSION, PROTOCOL, migrations.SCHEMA_VERSION) == ("1.15.1", 5, 5)
     changelog = (REPO_ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
     section = changelog.split("\n## 1.4.0\n", 1)[1].split("\n## ", 1)[0]
     for needle in ("Backwards compatible", "`protocol` stays 5", "8000", "text: too long", "note: too long",
@@ -357,7 +357,7 @@ def test_version_150_retains_140_compatibility():
                    "labels only", "The agent client", "relay status <id> --json", "No migration"):
         assert needle in section, needle
     readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
-    assert '"version": "1.15.0"' in readme and "X-Hook-Protocol: 6" in readme and '{"label"' in readme
+    assert '"version": "1.15.1"' in readme and "X-Hook-Protocol: 6" in readme and '{"label"' in readme
 
 
 def test_1_3_0_is_still_described():
@@ -2565,7 +2565,7 @@ class TestHook012OnPond130:
         matches and the protocol integer stays 5."""
         from mailbox import FEATURES
         _, base_url, token = server
-        assert call(base_url, "/version", token=token)[1] == {"service": "pond", "version": "1.15.0", "protocol": 5, "features": list(FEATURES)}
+        assert call(base_url, "/version", token=token)[1] == {"service": "pond", "version": "1.15.1", "protocol": 5, "features": list(FEATURES)}
 
 
 # --- choice objects and clients before protocol 6 (Pond 1.4.0) ----------------------
@@ -2975,7 +2975,7 @@ def test_link_page_script_aims_the_button_and_keeps_the_redirect():
 
 def test_1_12_1_is_described():
     """1.12.1 (the quiet-card launch page) is a patch: protocol 5, schema 5, no new
-    feature. 1.13.0, 1.14.0 and 1.15.0 came after: see test_the_version_is_1_15_0_with_protocol_5_and_schema_5."""
+    feature. 1.13.0, 1.14.0, 1.15.0 and 1.15.1 came after: see test_the_version_is_1_15_1_with_protocol_5_and_schema_5."""
     from mailbox import FEATURES
     assert FEATURES[-4] == "ownerKeyDates"
     changelog = (REPO_ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
@@ -3015,8 +3015,8 @@ def test_1_9_0_is_still_described():
 
 
 def test_1_11_0_is_still_described():
-    """1.12.0, 1.12.1, 1.13.0, 1.14.0 and 1.15.0 came after: the version check is
-    test_the_version_is_1_15_0_with_protocol_5_and_schema_5."""
+    """1.12.0, 1.12.1, 1.13.0, 1.14.0, 1.15.0 and 1.15.1 came after: the version check is
+    test_the_version_is_1_15_1_with_protocol_5_and_schema_5."""
     from mailbox import FEATURES
     assert FEATURES[-5:-3] == ("ownerRevokeRequest", "ownerKeyDates")
     changelog = (REPO_ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
@@ -3031,8 +3031,8 @@ def test_1_11_0_is_still_described():
 
 def test_1_13_0_is_still_described():
     """1.13.0 (`fields`, a settings table on a step) is additive: protocol 5, no
-    migration, one new feature name. 1.14.0 and 1.15.0 came after: see
-    test_the_version_is_1_15_0_with_protocol_5_and_schema_5."""
+    migration, one new feature name. 1.14.0, 1.15.0 and 1.15.1 came after: see
+    test_the_version_is_1_15_1_with_protocol_5_and_schema_5."""
     from mailbox import FEATURES
     assert FEATURES[-3] == "fields"
     changelog = (REPO_ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
@@ -3048,8 +3048,8 @@ def test_1_13_0_is_still_described():
 def test_1_14_0_is_still_described():
     """1.14.0 (`brief`, POST /asks/{id}/ask-about) is additive: protocol 5, no
     migration, one new feature name always (`brief`) and one while a key is set
-    (`askAbout`). 1.15.0 came after: see
-    test_the_version_is_1_15_0_with_protocol_5_and_schema_5."""
+    (`askAbout`). 1.15.0 and 1.15.1 came after: see
+    test_the_version_is_1_15_1_with_protocol_5_and_schema_5."""
     from mailbox import FEATURES
     assert FEATURES[-2] == "brief" and "askAbout" not in FEATURES
     changelog = (REPO_ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
@@ -3064,12 +3064,30 @@ def test_1_14_0_is_still_described():
         assert needle in readme, needle
 
 
-def test_the_version_is_1_15_0_with_protocol_5_and_schema_5():
-    """1.15.0 (`longAnswers`) is additive: an owner's answer text takes 8000 characters
-    (1000 before), as a message does. Protocol 5, no migration, one new feature name."""
+def test_the_version_is_1_15_1_with_protocol_5_and_schema_5():
+    """1.15.1 is a patch: the Central Time ack paths encode the id, a notification ref
+    must match whole, and it is the first signed two-platform image from the public
+    repository. Protocol 5, no migration, no new feature name."""
     from mailbox import FEATURES, PROTOCOL, VERSION, migrations
+    assert (VERSION, PROTOCOL, migrations.SCHEMA_VERSION) == ("1.15.1", 5, 5)
+    assert FEATURES[-1] == "longAnswers"
+    changelog = (REPO_ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+    flat = " ".join(changelog.split("\n## 1.15.1\n", 1)[1].split("\n## ", 1)[0].split())
+    for needle in ("`protocol` stays 5", "No migration", "No new feature name", "No new dependency",
+                   "Central Time", "`.` or `..`", "percent-encoded", "trailing newline",
+                   "linux/amd64", "linux/arm64", "signed", "name 1.15.1"):
+        assert needle in flat, needle
+    readme = " ".join((REPO_ROOT / "README.md").read_text(encoding="utf-8").split())
+    for needle in ('"version": "1.15.1"', "scripts/verify-image.sh 1.15.1", "release.yml@refs/tags/v1.15.1"):
+        assert needle in readme, needle
+
+
+def test_1_15_0_is_still_described():
+    """1.15.0 (`longAnswers`) is additive: an owner's answer text takes 8000 characters
+    (1000 before), as a message does. Protocol 5, no migration, one new feature name.
+    1.15.1 came after: see test_the_version_is_1_15_1_with_protocol_5_and_schema_5."""
+    from mailbox import FEATURES
     from mailbox.answers import MAX_ANSWER_TEXT
-    assert (VERSION, PROTOCOL, migrations.SCHEMA_VERSION) == ("1.15.0", 5, 5)
     assert FEATURES[-1] == "longAnswers" and MAX_ANSWER_TEXT == 8000
     changelog = (REPO_ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
     flat = " ".join(changelog.split("\n## 1.15.0\n", 1)[1].split("\n## ", 1)[0].split())
@@ -3078,7 +3096,7 @@ def test_the_version_is_1_15_0_with_protocol_5_and_schema_5():
                    "Telegram", "answers-vectors.json", "choice-vectors.json", "the Pond's release (history, progress, strict-JSON, append, document and phone) name 1.15.0"):
         assert needle in flat, needle
     readme = " ".join((REPO_ROOT / "README.md").read_text(encoding="utf-8").split())
-    for needle in ('"version": "1.15.0"', '"longAnswers"', "1-8,000 characters (1.15.0, feature `longAnswers`; 1-1,000 before)"):
+    for needle in ('"longAnswers"', "1-8,000 characters (1.15.0, feature `longAnswers`; 1-1,000 before)"):
         assert needle in readme, needle
     assert "(1-1,000 characters)" not in readme
 
@@ -3086,7 +3104,7 @@ def test_the_version_is_1_15_0_with_protocol_5_and_schema_5():
 def test_1_12_0_is_still_described():
     """1.12.0 (the total limit on stored documents) is additive: protocol 5, no
     migration, no new feature name. 1.12.1 and 1.13.0 came after: see
-    test_1_12_1_is_described and test_the_version_is_1_15_0_with_protocol_5_and_schema_5."""
+    test_1_12_1_is_described and test_the_version_is_1_15_1_with_protocol_5_and_schema_5."""
     from mailbox import FEATURES
     assert FEATURES[-4] == "ownerKeyDates"
     changelog = (REPO_ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
@@ -3098,7 +3116,7 @@ def test_1_12_0_is_still_described():
         assert needle in flat, needle
     readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
     flat_readme = " ".join(readme.split())
-    assert '"version": "1.15.0"' in readme
+    assert '"version": "1.15.1"' in readme
     assert "268,435,456 bytes" in flat_readme and "`409 {\"error\": \"document store full\"}`" in flat_readme
     assert "no total cap" not in flat_readme
     # Said once and true: normally no Telegram message; a lost race edits the one sent.

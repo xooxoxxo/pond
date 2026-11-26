@@ -19,7 +19,7 @@ env:
   # canonical vectors; mailbox/tests/ must match it byte for byte. Change this pin
   # together with Hook's POND_REF (see Hook's conformance/README.md).
   HOOK_REPOSITORY: xooxoxxo/hook
-  HOOK_REF: 8115ff687446400c56a81aac221705e92a21b935
+  HOOK_REF: 6c47d0a606230c4326e0765caad13329dc058f40
   HOOK_CONFORMANCE_DIR: ${{ github.workspace }}/hook-pin/conformance
   HOOK_CONFORMANCE_REQUIRED: "1"
 
