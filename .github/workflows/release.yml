@@ -256,12 +256,13 @@ jobs:
           docker buildx imagetools inspect --raw "$IMAGE_REPO@$DIGEST" > "$RUNNER_TEMP/index.json"
           scripts/verify-image.sh --check-index "$RUNNER_TEMP/index.json" > "$RUNNER_TEMP/platforms.txt"
           [ "$(wc -l < "$RUNNER_TEMP/platforms.txt")" -eq 2 ] || { echo "::error::expected 2 platforms"; exit 1; }
-          while read -r platform ref_digest; do
+          # The list is read on fd 3, so nothing in the loop can read the second line off stdin.
+          while read -r platform ref_digest <&3; do
             arch="${platform#linux/}"
             docker pull --platform "$platform" "$IMAGE_REPO@$ref_digest"
             docker tag "$IMAGE_REPO@$ref_digest" "pond-release-check:$arch"
-            scripts/test-image.sh "pond-release-check:$arch" "$arch" "$VERSION"
-          done < "$RUNNER_TEMP/platforms.txt"
+            scripts/test-image.sh "pond-release-check:$arch" "$arch" "$VERSION" </dev/null
+          done 3< "$RUNNER_TEMP/platforms.txt"
 
       - name: The version is not taken (decisive, right before tagging)
         env:

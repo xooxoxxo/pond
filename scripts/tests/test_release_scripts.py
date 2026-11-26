@@ -163,6 +163,130 @@ def test_verify_image_refuses_a_v_prefixed_version_before_any_network():
     assert "is not MAJOR.MINOR.PATCH" in run.stderr
 
 
+# The publish path of verify-image.sh and registry-tag.sh, with docker, cosign and curl
+# replaced by stubs on PATH. The v1.15.1 run verified the digest, printed that it was the
+# signed release, and then failed with "tmp: unbound variable": a RETURN trap set inside
+# a function stays set after it returns and fires again on the next function return,
+# where the function's locals are gone and `set -u` stops the script.
+
+FIXTURES = SCRIPTS / "fixtures" / "verify-image"
+D1 = "sha256:" + "1" * 64
+
+
+def _stub(bin_dir: Path, name: str, body: str) -> None:
+    path = bin_dir / name
+    path.write_text("#!/usr/bin/env bash\nset -euo pipefail\n" + body)
+    path.chmod(0o755)
+
+
+def _stub_env(tmp_path: Path) -> dict:
+    import os
+    bin_dir = tmp_path / "bin"
+    work = tmp_path / "tmp"
+    bin_dir.mkdir()
+    work.mkdir()
+    _stub(bin_dir, "docker", f"""
+case "$*" in
+  "buildx imagetools inspect --raw "*) cat {FIXTURES / "index-ok.json"} ;;
+  "buildx imagetools inspect "*) cat {FIXTURES / "inspect-ok.txt"} ;;
+  *) echo "docker stub: unexpected $*" >&2; exit 99 ;;
+esac
+""")
+    _stub(bin_dir, "cosign", f'cat {FIXTURES / "cosign-ok.json"}\n')
+    env = dict(os.environ, PATH=f"{bin_dir}:{os.environ['PATH']}", TMPDIR=str(work))
+    env.pop("IMAGE_REPO", None)
+    return env
+
+
+@pytest.mark.parametrize("args", [["--digest-only", D1], ["--digest", D1], []],
+                         ids=["digest-only", "digest", "tag"])
+def test_verify_image_succeeds_and_cleans_up_under_set_u(tmp_path, args):
+    env = _stub_env(tmp_path)
+    run = subprocess.run(["bash", str(SCRIPTS / "verify-image.sh"), "1.15.0", *args],
+                         capture_output=True, text=True, env=env)
+    assert run.returncode == 0, run.stdout + run.stderr
+    assert f"ghcr.io/xooxoxxo/pond@{D1} is the signed 1.15.0 release" in run.stdout
+    assert "unbound variable" not in run.stderr
+    assert list((tmp_path / "tmp").iterdir()) == []  # its temporary folder is gone
+
+
+def test_verify_image_still_fails_on_a_wrong_digest_and_cleans_up(tmp_path):
+    env = _stub_env(tmp_path)
+    run = subprocess.run(["bash", str(SCRIPTS / "verify-image.sh"), "1.15.0", "--digest", "sha256:" + "2" * 64],
+                         capture_output=True, text=True, env=env)
+    assert run.returncode == 1
+    assert "the release names sha256:2222" in run.stderr
+    assert "unbound variable" not in run.stderr
+    assert list((tmp_path / "tmp").iterdir()) == []
+
+
+def _registry_env(tmp_path: Path, index: bytes) -> dict:
+    import os
+    bin_dir = tmp_path / "bin"
+    work = tmp_path / "tmp"
+    bin_dir.mkdir()
+    work.mkdir()
+    (tmp_path / "index.json").write_bytes(index)
+    # curl --config - [...]: the credential comes on stdin and is dropped here.
+    _stub(bin_dir, "curl", f"""
+[[ "${{1:-}}" == --config ]] && cat >/dev/null
+args="$*"
+case "$args" in
+  *"/token?"*) echo '{{"token": "t"}}' ;;
+  *"-X PUT"*)
+    for a in "$@"; do [[ "$a" == @* ]] && cp "${{a#@}}" {tmp_path / "put.json"}; done
+    printf 201 ;;
+  *" -I "*) printf 404 ;;
+  *)
+    out=""; prev=""
+    for a in "$@"; do [[ "$prev" == -o ]] && out="$a"; prev="$a"; done
+    cp {tmp_path / "index.json"} "$out" ;;
+esac
+""")
+    env = dict(os.environ, PATH=f"{bin_dir}:{os.environ['PATH']}", TMPDIR=str(work),
+               REGISTRY_USER="someone", REGISTRY_TOKEN="not-a-real-token")
+    env.pop("IMAGE_REPO", None)
+    return env
+
+
+def test_registry_tag_puts_the_exact_index_bytes_and_cleans_up(tmp_path):
+    import hashlib
+    index = (FIXTURES / "index-ok.json").read_bytes()
+    digest = "sha256:" + hashlib.sha256(index).hexdigest()
+    env = _registry_env(tmp_path, index)
+    run = subprocess.run(["bash", str(SCRIPTS / "registry-tag.sh"), "tag", "1.15.0", digest],
+                         capture_output=True, text=True, env=env)
+    assert run.returncode == 0, run.stdout + run.stderr
+    assert f"ghcr.io/xooxoxxo/pond:1.15.0 -> {digest}" in run.stderr
+    assert (tmp_path / "put.json").read_bytes() == index
+    assert list((tmp_path / "tmp").iterdir()) == []
+
+
+def test_registry_tag_exists_reads_a_404_as_free(tmp_path):
+    env = _registry_env(tmp_path, b"{}")
+    run = subprocess.run(["bash", str(SCRIPTS / "registry-tag.sh"), "exists", "1.15.0"],
+                         capture_output=True, text=True, env=env)
+    assert run.returncode == 0, run.stderr
+    assert "is free (404)" in run.stderr
+
+
+def test_no_script_sets_a_return_trap_that_reads_a_variable_later():
+    # The trap text is run when it fires, not when it is set. A single-quoted RETURN trap
+    # that names a local reads it at a later function return, after the local is gone.
+    import re
+    for script in sorted(SCRIPTS.glob("*.sh")):
+        for number, line in enumerate(script.read_text().splitlines(), 1):
+            if re.search(r"\btrap\s+'[^']*\$[^']*'.*\bRETURN\b", line):
+                pytest.fail(f"{script.name}:{number}: {line.strip()}")
+
+
+def test_a_return_trap_outlives_its_function_in_bash():
+    # The bash behaviour the guard above relies on.
+    script = ("set -u; f() { local tmp=x; trap 'echo \"$tmp\"' RETURN; }; g() { f; }; g; echo reached")
+    run = subprocess.run(["bash", "-c", script], capture_output=True, text=True)
+    assert run.returncode != 0 and "unbound variable" in run.stderr
+
+
 # The workflows themselves (text checks: no YAML parser in the test tooling)
 
 WORKFLOWS = ROOT / ".github" / "workflows"

@@ -13,6 +13,29 @@ workflow refuses a tag without one (`scripts/check-release.py`). A release is pu
 as the signed image `ghcr.io/xooxoxxo/pond:X.Y.Z` (README, "Releasing" and "Verifying an
 image").
 
+## 1.15.2
+
+Backwards compatible: `protocol` stays 5, and Hook clients that need `^1.5.0`
+keep working. No migration: schema 5 is unchanged. No new feature name in
+`features`. No new dependency. The wire format is unchanged. The Pond itself is
+unchanged since 1.15.1: this release fixes the release scripts.
+
+- 1.15.1 was tagged but never published as an image: its release run verified
+  the signed digest and then stopped before tagging, so no
+  `ghcr.io/xooxoxxo/pond:1.15.1` exists. 1.15.2 is the first published signed
+  two-platform image (`linux/amd64` and `linux/arm64`) from the public repository,
+  and it holds everything listed under 1.15.1.
+- `scripts/verify-image.sh` no longer fails after a verify that passed. It set a
+  RETURN trap in a function to remove its temporary folder; bash keeps that trap
+  after the function returns and ran it again at the next function return, where
+  the folder's variable was gone, and `set -u` stopped the script with
+  `tmp: unbound variable`. The trap now carries the path itself and clears itself
+  when it fires. `scripts/registry-tag.sh tag` had the same trap and has the same fix.
+- The release workflow reads the list of platform images on its own file
+  descriptor, so no command in the loop can read it off stdin.
+- The vector files stamped with the Pond's release (history, progress,
+  strict-JSON, append, document and phone) name 1.15.2. No case changed.
+
 ## 1.15.1
 
 Backwards compatible: `protocol` stays 5, and Hook clients that need `^1.5.0`
