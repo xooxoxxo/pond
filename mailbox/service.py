@@ -344,6 +344,8 @@ class Service:
         instructable: Optional[dict[str, Any]] = None,
         edit_key_hash: Optional[str] = None,
         docs: Optional[dict[str, str]] = None,
+        principal_id: Optional[str] = None,
+        actor: str = "session",
     ) -> tuple[Item, dict[str, Any]]:
         """Post an ask to Telegram. Deduped if same key within 24h.
 
@@ -374,7 +376,7 @@ class Service:
 
         # Check for existing open ask with same key. Ruling S14: on a dedup
         # hit we return the existing item and make NO Telegram call at all.
-        existing = self.store.lookup_dedup_key(dedup_key, within_hours=24, now=self._utc())
+        existing = self.store.lookup_dedup_key(dedup_key, within_hours=24, now=self._utc(), principal_id=principal_id)
         if existing:
             return existing, {"deduped": True, **self._open_url(existing.id), **self._post_extras(existing, edit_key_hash)}
         if sent:
@@ -432,7 +434,8 @@ class Service:
         payload["tg_message_id"] = response.get("message_id")
         item.payload = json.dumps(payload)
         try:
-            self.store.insert_ask(item, rev1, edit_key_hash if rev1 is not None else None, docs=sent)
+            self.store.insert_ask(item, rev1, edit_key_hash if rev1 is not None else None, docs=sent,
+                                  principal_id=principal_id, actor=actor)
         except StoreFull:
             self._withdraw_message(response.get("message_id"))
             raise DocsRefused(409, dict(STORE_FULL)) from None
@@ -725,7 +728,7 @@ class Service:
 
     def amend(
         self, item_id: str, edit_key: str, base_rev: int, base_hash: str, reason: Any, instructable: Any,
-        docs: Optional[dict[str, str]] = None,
+        docs: Optional[dict[str, str]] = None, actor: str = "session",
     ) -> tuple[Item, Revision, dict[str, Any]]:
         """Correct an open ask in place: revision N+1 by compare-and-swap. Raises
         AmendError, in this order: 404 not found, 409 corrections not enabled, 403
@@ -802,7 +805,7 @@ class Service:
         advance = appended and self.store.accepted_rev(item_id) == current.rev
         try:
             self.store.amend_tx(item_id, base_rev=current.rev, base_hash=current.hash, new=revision, event_text=text,
-                                kind=kind, advance=advance, docs=sent)
+                                kind=kind, advance=advance, docs=sent, actor=actor)
         except AskNotOpen:
             raise AmendError(409, {"error": "ask is closed"}) from None
         except StoreFull:
@@ -820,7 +823,7 @@ class Service:
 
     def append(
         self, item_id: str, edit_key: str, base_rev: int, base_hash: str, note: Any, steps: Any,
-        docs: Optional[dict[str, str]] = None,
+        docs: Optional[dict[str, str]] = None, actor: str = "session",
     ) -> tuple[Item, Revision, list[dict]]:
         """Add steps after the last step of an open ask (Pond 1.9.0): revision N+1 by
         compare-and-swap, stored with kind "append". Raises AmendError, in this order:
@@ -882,7 +885,7 @@ class Service:
         text = json.dumps({"hash": revision.hash, "reason": note}, ensure_ascii=False, separators=(",", ":"))
         try:
             self.store.append_tx(item_id, base_rev=current.rev, base_hash=current.hash, new=revision, kind=kind,
-                                 advance=advance, event_text=text, docs=sent)
+                                 advance=advance, event_text=text, docs=sent, actor=actor)
         except AskNotOpen:
             raise AmendError(409, {"error": "ask is closed"}) from None
         except StoreFull:
@@ -1117,7 +1120,7 @@ class Service:
             return chat_id, newest[0], newest[1]
         return chat_id, payload.get("tg_message_id"), 1
 
-    def ack(self, item_id: str) -> Item:
+    def ack(self, item_id: str, *, actor: str = "session") -> Item:
         """Mark an ask as picked up (👀 prefix on Telegram), on its newest message,
         rendering the version in force."""
         item = self.store.get_item(item_id)
@@ -1139,10 +1142,10 @@ class Service:
                     except TelegramError:
                         pass  # Log but don't fail
 
-        self.store.append_event(item_id, "acked", "session", None)
+        self.store.append_event(item_id, "acked", actor, None)
         return self.store.get_item(item_id)
 
-    def steps(self, item_id: str, text: str) -> Item:
+    def steps(self, item_id: str, text: str, *, actor: str = "session") -> Item:
         """Post a session note under an ask (a reply to its newest message): plain,
         escaped text under a fixed prefix, never part of the ask. Raises AmendError
         400 invalid steps for a text the note rules refuse."""
@@ -1160,7 +1163,7 @@ class Service:
             except TelegramError:
                 pass  # Log but don't fail
 
-        self.store.append_event(item_id, "steps", "session", text)
+        self.store.append_event(item_id, "steps", actor, text)
         return self.store.get_item(item_id)
 
     def _pending(self, item_id: str) -> bool:

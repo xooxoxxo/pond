@@ -73,6 +73,7 @@ class MailboxHTTPHandler(BaseHTTPRequestHandler):
     sys_version = ""
     # Set by send_json, so the blanket 500 never writes a second response.
     _responded = False
+    principal = None
 
     # --- routing ---
 
@@ -111,6 +112,7 @@ class MailboxHTTPHandler(BaseHTTPRequestHandler):
     def _route_get(self) -> None:
         """Dispatch a GET."""
         parts = urlparse(self.path).path.split("/")
+        self._authorize_path(self.command, parts)
 
         if parts[:2] == ["", "admission"]:
             self.admission_get(parts[2:])
@@ -156,6 +158,7 @@ class MailboxHTTPHandler(BaseHTTPRequestHandler):
     def _route_post(self) -> None:
         """Dispatch a POST."""
         parts = urlparse(self.path).path.split("/")
+        self._authorize_path(self.command, parts)
 
         if parts[:2] == ["", "admission"]:
             self.admission_post(parts[2:])
@@ -203,6 +206,56 @@ class MailboxHTTPHandler(BaseHTTPRequestHandler):
 
     # --- helpers ---
 
+    def _authorize_path(self, method, parts):
+        """Resolve native credentials once per request and deny unclassified routes."""
+        self.principal = None
+        service = self.server.service
+        if service.admission.mode == "legacy":
+            return
+        route = parts[1:]
+        if method == "GET" and (route == ["health"] or route[:1] == ["i"]):
+            return
+        if route[:1] == ["admission"]:
+            return  # each explicit enrollment route verifies its own proof in its write transaction
+        if method == "POST" and route == ["notify"] and self.check_notify_auth():
+            return
+        self.principal = service.admission.authenticate(self._bearer())
+        is_agent = self.principal["kind"] == "agent"
+        if route == ["notify"] or route[:1] == ["owner"]:
+            raise AdmissionError(403, "credential unavailable for this route")
+        if method == "GET" and route in (["version"], ["events"]):
+            return
+        if route == ["asks"]:
+            return
+        if len(route) < 2 or route[0] != "asks":
+            raise AdmissionError(404, "not found")
+        if is_agent and not service.store.owns_ask(self.principal["id"], route[1]):
+            raise AdmissionError(404, "not found")
+        suffix = route[2:]
+        if method == "GET" and (not suffix or len(suffix) == 2 and suffix[0] == "docs"):
+            return
+        if method == "POST":
+            if suffix == ["docs", "release"] or (len(suffix) == 1 and
+                    suffix[0] in ("ack", "steps", "resolve", "amend", "append")):
+                return
+            if len(suffix) == 1 and suffix[0] in (
+                    "reply", "answers", "ask-about", "progress", "accept", "problems", "reopen"):
+                if is_agent:
+                    raise AdmissionError(403, "approved device required")
+                return
+        raise AdmissionError(404, "not found")
+
+    @property
+    def agent_id(self):
+        if self.principal and self.principal["kind"] == "agent":
+            return self.principal["id"]
+        return None
+
+    def _actor(self, legacy_actor):
+        if self.principal:
+            return "agent" if self.agent_id else "owner"
+        return legacy_actor
+
     def _bearer(self):
         auth = self.headers.get("Authorization", "")
         return auth[7:] if auth.startswith("Bearer ") else None
@@ -247,6 +300,8 @@ class MailboxHTTPHandler(BaseHTTPRequestHandler):
         compare_digest raises TypeError on a str holding a non-ASCII character
         (Ruling S39) — a garbled header must be a 401, not a dead connection.
         """
+        if self.principal is not None:
+            return True
         auth = self.headers.get("Authorization", "")
         if not self.server.mailbox_token or not auth.startswith("Bearer "):
             return False
@@ -306,6 +361,11 @@ class MailboxHTTPHandler(BaseHTTPRequestHandler):
         Otherwise a 403 is sent ("owner key required" without a key, "unknown
         owner key" for a bad, pending or revoked one) and None comes back."""
         service = self.server.service
+        if self.principal:
+            if self.principal["kind"] == "device":
+                return "owner-key"
+            self.send_json({"error": "approved device required"}, 403)
+            return None
         secret = self._owner_secret()
         if secret is None:
             if not always and not service.owner_key_required():
@@ -379,9 +439,7 @@ class MailboxHTTPHandler(BaseHTTPRequestHandler):
         0.9.x Hooks and clients still compare, and the features list (1.8.0) that
         new clients gate on: FEATURES, plus "docs" while documents are on (1.10.0).
         No client reads `service`."""
-        if self.server.service.admission.mode == "native":
-            self.server.service.admission.authenticate(self._bearer())
-        elif not self.check_auth():
+        if not self.check_auth():
             return self.send_json({"error": "unauthorized"}, 401)
         features = list(self.server.service.features())
         return self.send_json(
@@ -463,6 +521,8 @@ class MailboxHTTPHandler(BaseHTTPRequestHandler):
                 instructable=instructable,
                 edit_key_hash=edit_key_hash,
                 docs=body.get("docs"),
+                principal_id=self.principal["id"] if self.principal else None,
+                actor=self._actor("session"),
             )
         except DocsRefused as exc:
             # Field paths and hashes only, never a document's text.
@@ -522,7 +582,7 @@ class MailboxHTTPHandler(BaseHTTPRequestHandler):
         if kind is not None and kind not in ASK_KINDS:
             return self.send_json({"error": "invalid query"}, 400)
 
-        items = self.server.service.store.list_items(status=status, days=days, kind=kind)
+        items = self.server.service.store.list_items(status=status, days=days, kind=kind, principal_id=self.agent_id)
         return self.send_json({"items": [self._wire(i) for i in items]}, 200)
 
     def do_get_ask(self, item_id: str) -> None:
@@ -585,7 +645,7 @@ class MailboxHTTPHandler(BaseHTTPRequestHandler):
             return                         # malformed body is still a 400
 
         try:
-            item = self.server.service.ack(item_id)
+            item = self.server.service.ack(item_id, actor=self._actor("session"))
         except ValueError:
             return self.send_json({"error": "not found"}, 404)
 
@@ -605,7 +665,7 @@ class MailboxHTTPHandler(BaseHTTPRequestHandler):
             return self.send_json({"error": "missing text"}, 400)
 
         try:
-            item = self.server.service.steps(item_id, text)
+            item = self.server.service.steps(item_id, text, actor=self._actor("session"))
         except AmendError as exc:
             # Field paths only, never values: a pasted secret is not echoed.
             return self.send_json(exc.body, exc.status)
@@ -629,8 +689,8 @@ class MailboxHTTPHandler(BaseHTTPRequestHandler):
         if verdict not in ("done", "declined"):
             return self.send_json({"error": "invalid verdict"}, 400)
 
-        actor = body.get("actor") or "session"
-        if actor not in ("owner", "session"):
+        actor = self._actor(body.get("actor") or "session")
+        if not self.principal and actor not in ("owner", "session"):
             return self.send_json({"error": "invalid actor"}, 400)
 
         auth = None
@@ -737,8 +797,8 @@ class MailboxHTTPHandler(BaseHTTPRequestHandler):
         if body is None:
             return
 
-        actor = body.get("actor") or "owner"
-        if actor not in ("owner", "session"):
+        actor = self._actor(body.get("actor") or "owner")
+        if not self.principal and actor not in ("owner", "session"):
             return self.send_json({"error": "invalid actor"}, 400)
 
         auth = None
@@ -817,7 +877,7 @@ class MailboxHTTPHandler(BaseHTTPRequestHandler):
         try:
             item, revision, summary = service.amend(
                 item_id, edit_key, base_rev, base_hash, body.get("reason"), body["instructable"],
-                docs=body.get("docs"))
+                docs=body.get("docs"), actor=self._actor("session"))
         except AmendError as exc:
             return self.send_json(exc.body, exc.status)
         return self.send_json({
@@ -847,7 +907,7 @@ class MailboxHTTPHandler(BaseHTTPRequestHandler):
         try:
             item, revision, added = service.append(
                 item_id, edit_key, base_rev, base_hash, body.get("note"), body.get("steps"),
-                docs=body.get("docs"))
+                docs=body.get("docs"), actor=self._actor("session"))
         except AmendError as exc:
             return self.send_json(exc.body, exc.status)
         return self.send_json({
@@ -987,7 +1047,7 @@ class MailboxHTTPHandler(BaseHTTPRequestHandler):
         if after < 0 or not 1 <= limit <= MAX_LIMIT:
             return self.send_json({"error": "invalid query"}, 400)
 
-        events, next_cursor = self.server.service.store.read_events(after_seq=after, limit=limit)
+        events, next_cursor = self.server.service.store.read_events(after_seq=after, limit=limit, principal_id=self.agent_id)
         return self.send_json({
             "events": [
                 self._event_wire(e.item_id, e.seq, e.kind, e.actor, e.text, e.at, rev=e.rev, auth=e.auth)

@@ -359,7 +359,8 @@ class Store:
         "ask": " AND id NOT IN (SELECT item_id FROM bugs)",
     }
 
-    def list_items(self, status: Optional[str] = None, days: int = 14, kind: Optional[str] = None) -> list[Item]:
+    def list_items(self, status: Optional[str] = None, days: int = 14, kind: Optional[str] = None,
+                   *, principal_id: Optional[str] = None) -> list[Item]:
         """List items (optionally filtered by status and by kind, "bug" or "ask"),
         newest first, last N days. An unknown kind raises ValueError."""
         if kind not in self._KINDS:
@@ -368,6 +369,9 @@ class Store:
             cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat(timespec="seconds")
             # Assume items in range; a proper calendar anchor is future work
             query, args = "SELECT * FROM items WHERE created >= ?", [cutoff]
+            if principal_id is not None:
+                query += " AND id IN (SELECT item_id FROM ask_ownership WHERE principal_id=?)"
+                args.append(principal_id)
             if status is not None:
                 query += " AND status = ?"
                 args.append(status)
@@ -375,6 +379,11 @@ class Store:
             rows = cursor.fetchall()
             cols = [d[0] for d in cursor.description]
             return [Item(**{cols[i]: row[i] for i in range(len(cols))}) for row in rows]
+
+    def owns_ask(self, principal_id, item_id):
+        with self._lock:
+            return self.conn.execute("SELECT 1 FROM ask_ownership WHERE principal_id=? AND item_id=?",
+                                     (principal_id, item_id)).fetchone() is not None
 
     def insert_item(self, item: Item) -> Item:
         """Insert a new item; update the timestamp."""
@@ -551,13 +560,15 @@ class Store:
     # Events with their side-table metadata (rev, auth), NULL when there is none.
     _EVENTS = "SELECT e.*, m.rev, m.auth FROM events e LEFT JOIN event_meta m ON m.seq = e.seq"
 
-    def read_events(self, after_seq: int = 0, limit: int = 100) -> tuple[list[Event], int]:
+    def read_events(self, after_seq: int = 0, limit: int = 100, *, principal_id: Optional[str] = None) -> tuple[list[Event], int]:
         """Events after seq, newest first; return (events, next_cursor)."""
         with self._lock:
-            cursor = self.conn.execute(
-                f"{self._EVENTS} WHERE e.seq > ? ORDER BY e.seq ASC LIMIT ?",
-                (after_seq, limit + 1),
-            )
+            query = self._EVENTS + " WHERE e.seq > ?"
+            args = [after_seq]
+            if principal_id is not None:
+                query += " AND e.item_id IN (SELECT item_id FROM ask_ownership WHERE principal_id=?)"
+                args.append(principal_id)
+            cursor = self.conn.execute(query + " ORDER BY e.seq ASC LIMIT ?", (*args, limit + 1))
             rows = cursor.fetchall()
             cols = [d[0] for d in cursor.description]
             events = [Event(**{cols[i]: row[i] for i in range(len(cols))}) for row in rows[:limit]]
@@ -577,16 +588,17 @@ class Store:
             cols = [d[0] for d in cursor.description]
             return [Event(**{cols[i]: row[i] for i in range(len(cols))}) for row in rows]
 
-    def lookup_dedup_key(self, key: str, within_hours: int = 24, now: Optional[datetime] = None) -> Optional[Item]:
+    def lookup_dedup_key(self, key: str, within_hours: int = 24, now: Optional[datetime] = None,
+                         *, principal_id: Optional[str] = None) -> Optional[Item]:
         """Find an open item with this payload.key created within N hours of now."""
         with self._lock:
             cutoff = ((now or datetime.now(timezone.utc)) - timedelta(hours=within_hours)).isoformat(timespec="seconds")
-            cursor = self.conn.execute(
-                """SELECT * FROM items WHERE status = 'open' AND
-                   json_extract(payload, '$.key') = ? AND created > ?
-                   ORDER BY created DESC LIMIT 1""",
-                (key, cutoff),
-            )
+            query = "SELECT * FROM items WHERE status='open' AND json_extract(payload, '$.key')=? AND created>?"
+            args = [key, cutoff]
+            if principal_id is not None:
+                query += " AND id IN (SELECT item_id FROM ask_ownership WHERE principal_id=?)"
+                args.append(principal_id)
+            cursor = self.conn.execute(query + " ORDER BY created DESC LIMIT 1", args)
             rows = cursor.fetchall()
             if not rows:
                 return None
@@ -627,7 +639,8 @@ class Store:
         )
 
     def insert_ask(self, item: Item, rev1: Optional[Revision], edit_key_hash: Optional[str], *,
-                   docs: Optional[Mapping[str, bytes]] = None) -> Item:
+                   docs: Optional[Mapping[str, bytes]] = None, principal_id: Optional[str] = None,
+                   actor: str = "session") -> Item:
         """A new ask, all in one transaction: the items row, its revision 1 (None for an
         ask without an instructable), its edit key hash, the posted/session event, the
         rev-1 tg_messages row (from payload.tg_message_id, when set) and, from Pond
@@ -650,13 +663,16 @@ class Store:
                         item.links, item.created, item.updated,
                     ),
                 )
+                if principal_id is not None:
+                    self.conn.execute("INSERT INTO ask_ownership(item_id,principal_id) VALUES (?,?)",
+                                      (item.id, principal_id))
                 if rev1 is not None:
                     self._insert_revision(rev1)
                 self._keep_docs(item.id, docs, item.updated)
                 if edit_key_hash is not None:
                     self.conn.execute("INSERT INTO edit_keys (item_id, key_hash) VALUES (?, ?)",
                                       (item.id, edit_key_hash))
-                self._insert_event(item.id, "posted", "session", None, item.updated, None, None)
+                self._insert_event(item.id, "posted", actor, None, item.updated, None, None)
                 message_id = json.loads(item.payload).get("tg_message_id")
                 if message_id:
                     self.conn.execute("INSERT OR IGNORE INTO tg_messages (message_id, item_id, rev) VALUES (?, ?, 1)",
@@ -771,7 +787,7 @@ class Store:
 
     def amend_tx(self, item_id: str, *, base_rev: int, base_hash: str, new: Revision, event_text: str,
                  kind: str = "correction", advance: bool = False,
-                 docs: Optional[Mapping[str, bytes]] = None) -> Revision:
+                 docs: Optional[Mapping[str, bytes]] = None, actor: str = "session") -> Revision:
         """Append `new` by compare-and-swap, in one transaction: the ask must be open
         (else AskNotOpen) and its current revision must be (base_rev, base_hash) (else
         StaleRevision). Writes the revision, its revision_meta row (`kind`),
@@ -795,7 +811,7 @@ class Store:
                                   (item_id, new.rev, kind))
                 self.conn.execute("UPDATE items SET updated = ? WHERE id = ?", (new.at, item_id))
                 now = datetime.now(timezone.utc).isoformat(timespec="seconds")
-                self._insert_event(item_id, "revised", "session", event_text, now, new.rev, None)
+                self._insert_event(item_id, "revised", actor, event_text, now, new.rev, None)
                 if advance:
                     self.conn.execute("INSERT INTO accepts (item_id, rev, hash, at, auth) VALUES (?, ?, ?, ?, ?)",
                                       (item_id, new.rev, new.hash, now, "append"))
@@ -810,10 +826,10 @@ class Store:
             return new
 
     def append_tx(self, item_id: str, *, base_rev: int, base_hash: str, new: Revision, kind: str,
-                  advance: bool, event_text: str, docs: Optional[Mapping[str, bytes]] = None) -> Revision:
+                  advance: bool, event_text: str, docs: Optional[Mapping[str, bytes]] = None, actor: str = "session") -> Revision:
         """An append (Pond 1.9.0): amend_tx with its kind, the Pond's advance and its documents."""
         return self.amend_tx(item_id, base_rev=base_rev, base_hash=base_hash, new=new, event_text=event_text,
-                             kind=kind, advance=advance, docs=docs)
+                             kind=kind, advance=advance, docs=docs, actor=actor)
 
     def revision_kinds(self, item_id: str) -> dict[int, str]:
         """rev → kind for the ask's revisions written from Pond 1.9.0 on. A revision
