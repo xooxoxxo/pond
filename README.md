@@ -590,6 +590,3 @@ cosign verify ghcr.io/xooxoxxo/pond@sha256:<digest> \
 
 Then run it by digest, not by tag: set `MAILBOX_IMAGE=ghcr.io/xooxoxxo/pond@sha256:<digest>`
 in `.env` and `docker compose pull && docker compose up -d --no-build`.
-||||||| 769d8ef
-compare the shared vector files with Hook's; unset, that check is skipped. The
-`mailbox/tests/gen_*.py` generators rebuild the synthetic vector files.
