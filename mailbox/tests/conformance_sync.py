@@ -48,6 +48,7 @@ SHARED = (
     "data/doc-vectors.json",
     "data/brief-vectors.json",
     "data/fields-vectors.json",
+    "wire/admission-vectors.json",
     "wire/append-wire-vectors.json",
     "wire/doc-wire-vectors.json",
     "wire/choice-vectors.json",

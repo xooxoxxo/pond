@@ -19,7 +19,7 @@ from mailbox.service import Service
 from mailbox.store import Notification, Store
 from mailbox.server import MailboxServer
 from mailbox.telegram import FakeTelegramClient, TelegramClient
-from mailbox.tests.test_server import _running, call, find_free_port, post_ask
+from mailbox.tests.test_server import _running, call, find_free_port, legacy_database, post_ask
 
 AMS = ZoneInfo("Europe/Amsterdam")
 OWNER, PARTNER = 12345, 222
@@ -401,6 +401,8 @@ def test_the_command_id_is_chat_and_message_only(hh):
 
 
 def test_two_instances_on_their_own_backups_dirs_keep_their_own_token_mirrors(tmp_path):
+    legacy_database(tmp_path / "asks")
+    legacy_database(tmp_path / "hh")
     asks = MailboxServer(data_dir=tmp_path / "asks", backup_dir=tmp_path / "backups", telegram_token="a", owner_id=OWNER,
                          context="personal", port=find_free_port(), host="127.0.0.1")
     hh_srv = MailboxServer(data_dir=tmp_path / "hh", backup_dir=tmp_path / "backups-household", telegram_token="b",

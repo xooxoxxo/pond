@@ -6,6 +6,7 @@ import re
 import secrets
 import threading
 import time
+from collections import OrderedDict
 from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -14,6 +15,7 @@ from urllib.parse import parse_qs, urlparse
 
 from mailbox import PROTOCOL, VERSION, owner
 from mailbox import link_page
+from mailbox.admission import AdmissionError
 from mailbox.ask_about import Answerer
 from mailbox.clock import describe_zone, household_zone
 from mailbox.ct_client import CentralTimeClient
@@ -96,6 +98,9 @@ class MailboxHTTPHandler(BaseHTTPRequestHandler):
         """Answer anything unforeseen with a 500 instead of dropping the
         connection (Ruling S39). Only the exception TYPE is logged: a message
         can carry request data, and the request line can carry a secret."""
+        if isinstance(exc, AdmissionError):
+            self.send_json({"error": str(exc)}, exc.status)
+            return
         logger.error("[mailbox] request failed: %s", type(exc).__name__)
         if not self._responded:
             try:
@@ -107,7 +112,9 @@ class MailboxHTTPHandler(BaseHTTPRequestHandler):
         """Dispatch a GET."""
         parts = urlparse(self.path).path.split("/")
 
-        if self.path.startswith("/i/"):
+        if parts[:2] == ["", "admission"]:
+            self.admission_get(parts[2:])
+        elif self.path.startswith("/i/"):
             self.do_link_page()
         elif parts == ["", "health"]:
             self.do_health()
@@ -150,7 +157,9 @@ class MailboxHTTPHandler(BaseHTTPRequestHandler):
         """Dispatch a POST."""
         parts = urlparse(self.path).path.split("/")
 
-        if parts == ["", "asks"]:
+        if parts[:2] == ["", "admission"]:
+            self.admission_post(parts[2:])
+        elif parts == ["", "asks"]:
             self.do_post_ask()
         elif parts == ["", "notify"]:
             self.do_notify()
@@ -194,6 +203,43 @@ class MailboxHTTPHandler(BaseHTTPRequestHandler):
 
     # --- helpers ---
 
+    def _bearer(self):
+        auth = self.headers.get("Authorization", "")
+        return auth[7:] if auth.startswith("Bearer ") else None
+
+    def admission_get(self, parts):
+        a = self.server.service.admission
+        if parts == ["me"]:
+            result = a.me(self._bearer())
+        elif parts == ["principals"]:
+            result = a.principals(self._bearer())
+        elif parts == ["pending"]:
+            result = {"pending": a.pending(self._bearer())}
+        else:
+            return self.send_json({"error": "not found"}, 404)
+        self.send_json(result, 200)
+
+    def admission_post(self, parts):
+        a = self.server.service.admission
+        if parts not in (["claim"], ["invites"]) and not (
+            len(parts) == 3 and (parts[0], parts[2]) in (("requests", "decision"), ("principals", "revoke"))
+        ):
+            return self.send_json({"error": "not found"}, 404)
+        if parts == ["claim"]:
+            self.server.limit_claims(self.client_address[0])
+        body = self._json_body()
+        if body is None:
+            return
+        if parts == ["claim"]:
+            result = a.claim(body.get("invite"), body.get("keyHash"), body.get("kind"), body.get("label"))
+        elif parts == ["invites"]:
+            result = a.invite(self._bearer(), body.get("kind"))
+        elif parts[0] == "requests":
+            result = a.decide(self._bearer(), parts[1], body.get("decision"), body.get("code"))
+        else:
+            result = a.revoke(self._bearer(), parts[1])
+        self.send_json(result, 201 if len(parts) == 1 else 200)
+
     def check_auth(self) -> bool:
         """Check the Bearer token in constant time.
 
@@ -202,7 +248,7 @@ class MailboxHTTPHandler(BaseHTTPRequestHandler):
         (Ruling S39) — a garbled header must be a 401, not a dead connection.
         """
         auth = self.headers.get("Authorization", "")
-        if not auth.startswith("Bearer "):
+        if not self.server.mailbox_token or not auth.startswith("Bearer "):
             return False
         return secrets.compare_digest(
             auth[7:].encode("latin-1", "replace"), self.server.mailbox_token.encode()
@@ -333,7 +379,9 @@ class MailboxHTTPHandler(BaseHTTPRequestHandler):
         0.9.x Hooks and clients still compare, and the features list (1.8.0) that
         new clients gate on: FEATURES, plus "docs" while documents are on (1.10.0).
         No client reads `service`."""
-        if not self.check_auth():
+        if self.server.service.admission.mode == "native":
+            self.server.service.admission.authenticate(self._bearer())
+        elif not self.check_auth():
             return self.send_json({"error": "unauthorized"}, 401)
         features = list(self.server.service.features())
         return self.send_json(
@@ -1092,6 +1140,8 @@ class MailboxHTTPHandler(BaseHTTPRequestHandler):
         body = json.dumps(data, ensure_ascii=False).encode("utf-8")
         self._responded = True
         self.send_response(status)
+        if self.path.startswith("/admission/"):
+            self.send_header("Cache-Control", "no-store")
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
@@ -1110,7 +1160,7 @@ class MailboxHTTPServer(ThreadingHTTPServer):
     allow_reuse_address = True
 
     def __init__(
-        self, address: tuple[str, int], service: Service, mailbox_token: str,
+        self, address: tuple[str, int], service: Service, mailbox_token: Optional[str],
         notify_token: Optional[str] = None,
     ):
         super().__init__(address, MailboxHTTPHandler)
@@ -1125,6 +1175,24 @@ class MailboxHTTPServer(ThreadingHTTPServer):
         # Set while serve_forever is running: shutdown() blocks forever if it
         # is called when the loop was never started.
         self.serving = threading.Event()
+        self.claim_lock = threading.Lock()
+        self.claim_windows = OrderedDict()
+
+    def limit_claims(self, peer):
+        # Use the TCP peer, never an unverified forwarding header. Bound memory
+        # independently of the number of addresses that contact this server.
+        now = time.monotonic()
+        with self.claim_lock:
+            start, count = self.claim_windows.get(peer, (now, 0))
+            if now - start >= 60:
+                start, count = now, 0
+            if count >= 64:
+                raise AdmissionError(429, "claim limit reached")
+            self.claim_windows[peer] = start, count + 1
+            self.claim_windows.move_to_end(peer)
+            if len(self.claim_windows) > 1024:
+                self.claim_windows.popitem(last=False)
+
 
     def serve_forever(self, poll_interval: float = 0.5) -> None:
         """Serve until shutdown(), tracking that the loop is live."""
@@ -1188,7 +1256,7 @@ class MailboxServer:
         # The token core presents on POST /notify; None = only the mailbox token works there.
         self.notify_token = notify_token
 
-        self.mailbox_token = self._setup_mailbox_token()
+        self.mailbox_token = self._setup_mailbox_token() if self.service.admission.mode != "native" else None
 
         self.http_server = MailboxHTTPServer(
             (host, port), self.service, self.mailbox_token, notify_token=self.notify_token

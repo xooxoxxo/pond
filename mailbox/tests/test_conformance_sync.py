@@ -43,7 +43,7 @@ def _run(args, env=None):
 # --- the pinned lists ----------------------------------------------------------------
 
 def test_the_pinned_lists_are_well_formed():
-    assert len(sync.SHARED) == 25
+    assert len(sync.SHARED) == 26
     assert len(set(sync.SHARED)) == len(sync.SHARED)
     names = [Path(p).name for p in sync.SHARED]
     assert len(set(names)) == len(names), "two shared paths share a basename"
@@ -64,7 +64,7 @@ def test_the_shared_files_match_hook():
     report = sync.compare(_hook_dir(), HERE)
     assert report.errors == []
     assert sorted(report.matched) == sorted(sync.SHARED)
-    assert len(report.matched) == 25
+    assert len(report.matched) == 26
 
 
 @pytest.mark.parametrize("path", sync.SHARED)
@@ -79,7 +79,7 @@ def test_a_shared_file_is_byte_identical(path):
 def test_the_command_passes_on_the_real_trees():
     code, out = _run(["--hook", str(_hook_dir()), "--tests", str(HERE)])
     assert code == 0, out
-    assert "25 shared files match" in out
+    assert "26 shared files match" in out
 
 
 # --- synthetic trees: every failure is loud --------------------------------------------
@@ -118,7 +118,7 @@ def test_synthetic_trees_that_agree_pass(trees):
     hook, pond = trees
     report = sync.compare(hook, pond)
     assert report.errors == []
-    assert len(report.matched) == 25
+    assert len(report.matched) == 26
     code, out = _run(["--hook", str(hook), "--tests", str(pond)])
     assert code == 0, out
 

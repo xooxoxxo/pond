@@ -19,11 +19,12 @@ import json
 import logging
 import sqlite3
 
+from mailbox import migration_006_admission
 from mailbox.revisions import assign_ids, canonical, revision_hash
 
 logger = logging.getLogger("mailbox")
 
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 
 _DDL_1 = (
     """CREATE TABLE IF NOT EXISTS revisions (item_id TEXT NOT NULL REFERENCES items(id), rev INTEGER NOT NULL,
@@ -92,30 +93,33 @@ _DDL_5 = (
 )
 
 # (version, its DDL), in order: a database at user_version N runs every step above N.
-_STEPS = ((1, _DDL_1), (2, _DDL_2), (3, _DDL_3), (4, _DDL_4), (5, _DDL_5))
+_STEPS = ((1, _DDL_1), (2, _DDL_2), (3, _DDL_3), (4, _DDL_4), (5, _DDL_5), (6, migration_006_admission.DDL))
 
 
-def migrate(conn: sqlite3.Connection) -> None:
+def migrate(conn: sqlite3.Connection, *, fresh: bool = False) -> None:
     """Bring the database to SCHEMA_VERSION, then backfill. Idempotent."""
-    if conn.in_transaction:
-        conn.commit()
-    if conn.execute("PRAGMA user_version").fetchone()[0] < SCHEMA_VERSION:
-        try:
+    # Store.open already holds BEGIN IMMEDIATE across base schema creation.
+    # Direct callers start their own transaction. Both paths commit together.
+    try:
+        if not conn.in_transaction:
             conn.execute("BEGIN IMMEDIATE")
-            # Read again under the write lock: another process may have migrated meanwhile.
-            version = conn.execute("PRAGMA user_version").fetchone()[0]
-            for step, statements in _STEPS:
-                if version < step:
-                    for statement in statements:
-                        if callable(statement):
-                            statement(conn)
-                        else:
-                            conn.execute(statement)
-            conn.execute(f"PRAGMA user_version = {max(version, SCHEMA_VERSION)}")
-            conn.commit()
-        except BaseException:
-            conn.rollback()
-            raise
+        version = conn.execute("PRAGMA user_version").fetchone()[0]
+        for step, statements in _STEPS:
+            if version < step:
+                for statement in statements:
+                    if callable(statement):
+                        statement(conn)
+                    else:
+                        conn.execute(statement)
+        if version < 6:
+            conn.execute("INSERT OR IGNORE INTO admission_state(singleton, mode) VALUES (1, ?)",
+                         ("native" if fresh else "legacy",))
+        if version < SCHEMA_VERSION:
+            conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
+        conn.commit()
+    except BaseException:
+        conn.rollback()
+        raise
     _backfill(conn)
 
 

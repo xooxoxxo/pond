@@ -21,7 +21,7 @@ from mailbox.service import Service
 from mailbox.store import Store
 from mailbox.server import MailboxServer
 from mailbox.telegram import FakeTelegramClient, TelegramError
-from mailbox.tests.test_server import OWNER_ID, _running, answers_call, call, find_free_port, post_ask, post_questions
+from mailbox.tests.test_server import OWNER_ID, _running, answers_call, call, find_free_port, legacy_database, post_ask, post_questions
 
 GOLDEN = Path(__file__).with_name("golden_asks_path.json")
 UUID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
@@ -73,6 +73,7 @@ def logged():
 def startup_section(tmp_path):
     """The startup log lines from a real start(), and /health once a poll has succeeded."""
     out = {}
+    legacy_database(tmp_path / "start-data")
     with logged() as lines:
         srv = MailboxServer(
             data_dir=tmp_path / "start-data", backup_dir=tmp_path / "start-backups", telegram_token="test_token",

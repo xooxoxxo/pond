@@ -11,7 +11,7 @@ RUN apk add --no-cache tzdata=2026f-r0 && adduser -D -u 1000 mailbox
 WORKDIR /app
 
 # Runtime files only, named one by one: no tests, docs, env files or host scripts reach the image.
-COPY __init__.py __main__.py admin.py answers.py ask_about.py capture.py clock.py ct_client.py \
+COPY __init__.py __main__.py admin.py admission.py migration_006_admission.py answers.py ask_about.py capture.py clock.py ct_client.py \
      docs.py household.py instructable.py link_icon.py link_page.py migrations.py notification.py \
      owner.py requirements.py revisions.py server.py service.py store.py telegram.py \
      /app/mailbox/
