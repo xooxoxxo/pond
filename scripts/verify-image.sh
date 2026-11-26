@@ -100,7 +100,11 @@ verify() {
     command -v "$tool" >/dev/null || { fail "$tool is not installed"; return 1; }
   done
   tmp="$(mktemp -d)"
-  trap 'rm -rf "$tmp"' RETURN
+  # Expanded now, and cleared when it fires: a RETURN trap set in a function stays set
+  # after it returns and would run again at the next function return, where this local
+  # is gone (set -u). EXIT covers a set -e stop inside the function.
+  # shellcheck disable=SC2064
+  trap "rm -rf -- $(printf '%q' "$tmp"); trap - RETURN EXIT" RETURN EXIT
 
   if [[ "$mode" == digest-only ]]; then
     digest="$want_digest"

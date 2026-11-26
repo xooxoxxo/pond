@@ -64,7 +64,11 @@ tag() {
   [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]] || { say "digest '$digest' is not sha256:<64 hex>"; return 1; }
   token="$(bearer)"
   tmp="$(mktemp)"
-  trap 'rm -f "$tmp"' RETURN
+  # Expanded now, and cleared when it fires: a RETURN trap set in a function stays set
+  # after it returns and would run again at the next function return, where this local
+  # is gone (set -u). EXIT covers a set -e stop inside the function.
+  # shellcheck disable=SC2064
+  trap "rm -f -- $(printf '%q' "$tmp"); trap - RETURN EXIT" RETURN EXIT
   curl_secret "header = \"Authorization: Bearer $token\"" -fsS -H "Accept: $accept" \
     "https://$host/v2/$name/manifests/$digest" -o "$tmp"
   got="sha256:$(sha256 "$tmp")"
