@@ -5,7 +5,8 @@ __version__ = "0.1.0"
 # CHANGELOG.md. Hook releases name the Pond range they need (`^1.1.0`), so a minor
 # or patch bump never forces a Hook update. A major is only for a breaking change:
 # a removed route, a changed meaning, or required auth that isn't behind a switch.
-VERSION = "1.15.2"
+VERSION = "1.16.0"
+ADMISSION_FEATURE = "admission"
 
 # The features this Pond has, listed by GET /version (1.8.0). Clients gate a new
 # feature on its name here, never on VERSION, so the order Pond branches merge in

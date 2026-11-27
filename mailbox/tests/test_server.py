@@ -36,7 +36,7 @@ class RunningServer(NamedTuple):
 
     srv: MailboxServer
     base_url: str
-    token: str
+    token: str | None
 
     def __repr__(self) -> str:
         return f"<RunningServer {self.base_url} token=(redacted)>"
@@ -112,9 +112,18 @@ def raw_post_without_content_length(port: int, path: str, token: str) -> tuple[i
     return raw_exchange(port, request)
 
 
-def _running(tmp_path, **kwargs):
+def legacy_database(directory):
+    from mailbox.tests.test_migrations import _old_database
+    directory.mkdir(exist_ok=True, parents=True)
+    if not (directory / "mailbox.db").exists():
+        _old_database(directory / "mailbox.db").close()
+
+
+def _running(tmp_path, *, native=False, **kwargs):
     """Start a mailbox server on loopback with the Telegram fake, yield it,
     stop it. `kwargs` go to MailboxServer (e.g. notify_token=...)."""
+    if not native:
+        legacy_database(tmp_path / "data")
     port = find_free_port()
     srv = MailboxServer(
         data_dir=tmp_path / "data",
@@ -139,7 +148,7 @@ def _running(tmp_path, **kwargs):
 
     base_url = f"http://127.0.0.1:{port}"
     # The token the server generated, read from its file (never printed).
-    token = (tmp_path / "data" / "mailbox-token").read_text(encoding="utf-8").strip()
+    token = None if native else (tmp_path / "data" / "mailbox-token").read_text(encoding="utf-8").strip()
 
     deadline = time.time() + 10
     while time.time() < deadline:
@@ -151,11 +160,12 @@ def _running(tmp_path, **kwargs):
     else:
         pytest.fail("server did not start")
 
-    yield RunningServer(srv, base_url, token)
-
-    srv.stop()
-    thread.join(timeout=10)
-    assert not thread.is_alive()
+    try:
+        yield RunningServer(srv, base_url, token)
+    finally:
+        srv.stop()
+        thread.join(timeout=10)
+        assert not thread.is_alive()
 
 
 @pytest.fixture
@@ -196,6 +206,7 @@ def test_token_is_reused_on_restart(tmp_path):
         context="personal",
         host="127.0.0.1",
     )
+    legacy_database(tmp_path / "data")
     first = MailboxServer(port=find_free_port(), **kwargs)
     first_token = first.mailbox_token
     first.stop()
@@ -311,7 +322,7 @@ def test_version_reports_service_version_and_protocol(server):
     status, data = call(base_url, "/version", token=token)
     from mailbox import FEATURES
     assert status == 200
-    assert data == {"service": "pond", "version": "1.15.2", "protocol": 5, "features": list(FEATURES)}
+    assert data == {"service": "pond", "version": "1.16.0", "protocol": 5, "features": list(FEATURES)}
 
 
 def test_version_lists_features(server):
@@ -345,10 +356,10 @@ def test_the_version_is_strict_semver_with_a_changelog_entry():
 
 def test_version_150_retains_140_compatibility():
     """Pond 1.4.0 adds choice objects and 8000-character owner text without breaking a
-    1.3.0 client: the version is 1.15.2, the protocol integer stays 5 and the schema
-    is 5 (1.11.0's owner key dates; 1.4.0 itself needed no migration)."""
+    1.3.0 client: the version is 1.16.0, the protocol integer stays 5 and the schema
+    is 6 (schema 5 added owner key dates; 1.4.0 itself needed no migration)."""
     from mailbox import PROTOCOL, VERSION, migrations
-    assert (VERSION, PROTOCOL, migrations.SCHEMA_VERSION) == ("1.15.2", 5, 5)
+    assert (VERSION, PROTOCOL, migrations.SCHEMA_VERSION) == ("1.16.0", 5, 6)
     changelog = (REPO_ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
     section = changelog.split("\n## 1.4.0\n", 1)[1].split("\n## ", 1)[0]
     for needle in ("Backwards compatible", "`protocol` stays 5", "8000", "text: too long", "note: too long",
@@ -357,7 +368,7 @@ def test_version_150_retains_140_compatibility():
                    "labels only", "The agent client", "relay status <id> --json", "No migration"):
         assert needle in section, needle
     readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
-    assert '"version": "1.15.2"' in readme and "X-Hook-Protocol: 6" in readme and '{"label"' in readme
+    assert '"version": "1.16.0"' in readme and "X-Hook-Protocol: 6" in readme and '{"label"' in readme
 
 
 def test_1_3_0_is_still_described():
@@ -2565,7 +2576,7 @@ class TestHook012OnPond130:
         matches and the protocol integer stays 5."""
         from mailbox import FEATURES
         _, base_url, token = server
-        assert call(base_url, "/version", token=token)[1] == {"service": "pond", "version": "1.15.2", "protocol": 5, "features": list(FEATURES)}
+        assert call(base_url, "/version", token=token)[1] == {"service": "pond", "version": "1.16.0", "protocol": 5, "features": list(FEATURES)}
 
 
 # --- choice objects and clients before protocol 6 (Pond 1.4.0) ----------------------
@@ -3070,7 +3081,7 @@ def test_the_version_is_1_15_2_with_protocol_5_and_schema_5():
     everything under 1.15.1 (tagged, never published). Protocol 5, no migration, no new
     feature name."""
     from mailbox import FEATURES, PROTOCOL, VERSION, migrations
-    assert (VERSION, PROTOCOL, migrations.SCHEMA_VERSION) == ("1.15.2", 5, 5)
+    assert (VERSION, PROTOCOL, migrations.SCHEMA_VERSION) == ("1.16.0", 5, 6)
     assert FEATURES[-1] == "longAnswers"
     changelog = (REPO_ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
     flat = " ".join(changelog.split("\n## 1.15.2\n", 1)[1].split("\n## ", 1)[0].split())
@@ -3080,7 +3091,7 @@ def test_the_version_is_1_15_2_with_protocol_5_and_schema_5():
                    "name 1.15.2"):
         assert needle in flat, needle
     readme = " ".join((REPO_ROOT / "README.md").read_text(encoding="utf-8").split())
-    for needle in ('"version": "1.15.2"', "scripts/verify-image.sh 1.15.2", "release.yml@refs/tags/v1.15.2"):
+    for needle in ('"version": "1.16.0"', "scripts/verify-image.sh 1.15.2", "release.yml@refs/tags/v1.15.2"):
         assert needle in readme, needle
 
 
@@ -3132,7 +3143,7 @@ def test_1_12_0_is_still_described():
         assert needle in flat, needle
     readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
     flat_readme = " ".join(readme.split())
-    assert '"version": "1.15.2"' in readme
+    assert '"version": "1.16.0"' in readme
     assert "268,435,456 bytes" in flat_readme and "`409 {\"error\": \"document store full\"}`" in flat_readme
     assert "no total cap" not in flat_readme
     # Said once and true: normally no Telegram message; a lost race edits the one sent.

@@ -15,6 +15,8 @@ from uuid import uuid4
 from mailbox import FEATURES, ask_about, capture, household, owner
 from mailbox import docs as documents             # `docs` is the request member here
 from mailbox import requirements as req         # `requirements` is wire_item's flag
+from mailbox import ADMISSION_FEATURE
+from mailbox.admission import Admission
 from mailbox.answers import current as current_answers
 from mailbox.answers import questions, validate_answers
 from mailbox.clock import household_zone
@@ -250,6 +252,7 @@ class Service:
             raise ValueError("telegram_mode must be full or alert")
         self.telegram_mode = telegram_mode
         self.store = store
+        self.admission = Admission(store)
         self.brief_asks = brief_asks
         # Household mode (MAILBOX_MEMBERS): Telegram id -> name. None is the asks instance, unchanged.
         self.members = members
@@ -539,6 +542,8 @@ class Service:
         """FEATURES, plus "docs" while documents are on (GET /version), plus "askAbout"
         while the Pond has an Anthropic API key (1.14.0)."""
         extra = (("docs",) if self.docs_enabled() else ()) + (("askAbout",) if self.ask_about_enabled() else ())
+        if self.admission.mode != "legacy":
+            extra += (ADMISSION_FEATURE,)
         return FEATURES + extra
 
     def _docs_gate(self, instructable: Optional[dict[str, Any]], docs: Any, held: set[str], *,

@@ -13,6 +13,13 @@ workflow refuses a tag without one (`scripts/check-release.py`). A release is pu
 as the signed image `ghcr.io/xooxoxxo/pond:X.Y.Z` (README, "Releasing" and "Verifying an
 image").
 
+## 1.16.0
+
+Schema 6 adds per-device and per-agent credentials, expiring single-use invites, native approval and
+individual revocation. The first device joins with a link minted by a local operator. Fresh installations
+use individual credentials. Existing databases retain legacy authentication on upgrade. Protocol stays 5.
+An authenticated native connection advertises the `admission` feature.
+
 ## 1.15.2
 
 Backwards compatible: `protocol` stays 5, and Hook clients that need `^1.5.0`

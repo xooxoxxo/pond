@@ -216,15 +216,19 @@ class Store:
     def open(self) -> None:
         """Open or create the database with WAL mode."""
         with self._lock:
-            create = not self.db_path.exists()
             self.conn = sqlite3.connect(str(self.db_path), timeout=30.0, check_same_thread=False)
             self.conn.execute("PRAGMA journal_mode=WAL")
             self.conn.execute("PRAGMA synchronous=NORMAL")
-            if create:
-                self._schema()
-            self._notifications_table()
-            self.conn.commit()
-            migrations.migrate(self.conn)
+            try:
+                self.conn.execute("BEGIN IMMEDIATE")
+                create = not self.conn.execute("SELECT 1 FROM sqlite_master WHERE type='table'").fetchone()
+                if create:
+                    self._schema()
+                self._notifications_table()
+                migrations.migrate(self.conn, fresh=create)
+            except BaseException:
+                self.close()
+                raise
 
     def close(self) -> None:
         """Close the database."""

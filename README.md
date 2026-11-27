@@ -13,6 +13,20 @@ Telegram bot, one queue, one API token. The Python package is `mailbox/`
 Licensed under the MIT License (see `LICENSE`). Security reports: see
 `SECURITY.md`.
 
+## Device admission
+
+On a fresh Pond, set `MAILBOX_PUBLIC_ORIGIN` to the HTTPS origin clients use.
+On the server, run `docker compose exec -T mailbox python3 -m mailbox.admin admission invite --first`.
+Open the resulting link on the first device within 15 minutes. Each replacement link expires the previous one.
+An admitted device can invite another device or an agent. Compare the six-digit code before approving.
+To recover access, run the same local command with `--recovery`, claim the link, and verify the new
+device before revoking the lost one. When all ten slots are occupied, use the local `admission devices`
+command to identify the lost device, then use `admission invite --recovery --replace ID`. The Pond
+revokes only that device when its replacement proves possession of its key. Treat the whole link as a credential.
+
+Schema 6 keeps upgraded installations in legacy mode. Existing clients retain their shared-token flow.
+An authenticated native connection advertises `admission` in `GET /version`.
+
 ## Versions
 
 The Pond is versioned with semver (`mailbox/__init__.py` `VERSION`, notes in
@@ -43,17 +57,13 @@ You need Docker with Compose, a Telegram bot token from
    daemon resolved with its offset, not the `TZ` value. The image pins
    `tzdata` for that; without it musl would run any other zone as UTC in
    silence.
-5. The Pond token (used by every API call except `/health` and `/i/<uuid>`)
-   is generated once on first start and written to `backups/mailbox-token`
-   (mode 600). It is never logged. Give it to your clients without displaying
-   it, for example by copying the file.
-6. Check it answers:
-   `curl -s -H "Authorization: Bearer $(cat backups/mailbox-token)" http://127.0.0.1:8790/version`.
+5. Configure an HTTPS reverse proxy for port 8790. Set `MAILBOX_PUBLIC_ORIGIN` to that origin
+   in the container environment, then follow the device admission steps above.
+6. From the admitted client, fetch `GET /version` with its bearer to verify the connection.
 
-The server listens on port 8790 (`MAILBOX_PORT`). It speaks plain HTTP: put
-it behind a TLS-terminating reverse proxy or a private network before any
-client reaches it over the internet. Only `GET /health` and `GET /i/<uuid>`
-work without the token.
+On upgraded installations in legacy mode, clients still read the shared credential copied
+from `backups/mailbox-token` (mode 600). The daemon serves HTTP behind the TLS proxy.
+Health, link pages and admission claims have their own authentication rules.
 
 ### Configuration
 
@@ -63,6 +73,7 @@ work without the token.
 | `MAILBOX_OWNER_ID` | yes | The owner's numeric Telegram user id. Updates from anyone else are dropped and counted. |
 | `MAILBOX_CONTEXT` | yes | The context name this Pond serves, for example `personal`. A post for another context is `403`. |
 | `TZ` | yes | IANA zone for the nightly backup and for capture dates. Compose refuses to start without it. |
+| `MAILBOX_PUBLIC_ORIGIN` | for invites | External HTTPS origin included in locally minted join links. |
 | `MAILBOX_PORT` | no | Listening port inside the container, default 8790. |
 | `MAILBOX_HOST_PORT` | no | Host port `compose.yaml` publishes, default 8790. |
 | `MAILBOX_IMAGE` | no | Image tag `compose.yaml` builds and runs, default `pond:local`. |
@@ -114,7 +125,7 @@ All endpoints except public `GET /health` and `GET /i/<uuid>` require
 |---|---|---|---|
 | `GET` | `/health` | liveness probe, no auth | `200` healthy, `503` unhealthy |
 | `GET` | `/i/<uuid>` | public fixed Hook launch page; validates only the UUID, never reads an ask | `200` HTML, `404` |
-| `GET` | `/version` | `{"service": "pond", "version": "1.15.2", "protocol": 5, "features": ["answers", …, "appendSteps", "ownerRevokeRequest", "ownerKeyDates", "fields", "brief", "longAnswers", "docs", "askAbout"]}`; Hook checks `version` against the range it needs, 0.9.x compares `protocol`; a client gates a new feature on its name in `features` (1.8.0), never on the version | `200`, `401` |
+| `GET` | `/version` | `{"service": "pond", "version": "1.16.0", "protocol": 5, "features": ["answers", …, "appendSteps", "ownerRevokeRequest", "ownerKeyDates", "fields", "brief", "longAnswers", "docs", "askAbout"]}`; Hook checks `version` against the range it needs, 0.9.x compares `protocol`; a client gates a new feature on its name in `features` (1.8.0), never on the version | `200`, `401` |
 | `POST` | `/asks` | post an ask (deduped by payload key within 24h); optional `instructable` (Hook instructable v1, see `instructable.py`), `ask` then defaults to its title; its steps get ids (`s1`, `s3.1`) unless every step has one (an id may not read as a step number such as `2` or `3.1`), and it becomes revision 1. Optional `editKeyHash` (64 lowercase hex, the SHA-256 of the poster's edit key). The response carries `revision` `{rev, hash}` and `editable` (true only for the stored hash, also on a dedupe hit). Optional `docs` (1.10.0, see Documents below) | `201` created, `200` deduped, `400` missing fields, `invalid editKeyHash` or `{"error": "invalid instructable", "details": [...]}`, `403` wrong context, `409` documents not enabled, `400` `{"error": "invalid documents", "details": [...]}`, `409` document store full (1.12.0), `502` Telegram send failed |
 | `POST` | `/asks` with `kind: "bug"` | a Hook bug (1.2.0): `{project, context, kind: "bug", signature, instructable}`, owner key always, never sent to Telegram. Deduped by `signature` (12 lowercase hex) while a bug with it is open: the repeat adds an occurrence. The item carries `kind: "bug"` and `bug` `{signature, count, firstSeen, lastSeen}`. A bug takes no documents (1.10.0): a `doc` or a `docs` member is refused as for an ask, `409` documents not enabled or `400` invalid documents | `201` `{"item", "occurrences": 1}`, `200` `{"item", "deduped": true, "occurrences": n}`, `400` invalid kind, invalid signature, missing fields or invalid instructable, `403` owner key required, unknown owner key or wrong context |
 | `GET` | `/asks?status=open&days=14&kind=bug` | list asks; `kind` (1.2.0) is `bug` or `ask`, absent for both | `200`, `400` invalid query |

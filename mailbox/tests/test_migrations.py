@@ -72,7 +72,7 @@ def test_a_pond_1_0_0_database_migrates(old_db):
     path, ids = old_db
     store = _open(path)
     try:
-        assert store.conn.execute("PRAGMA user_version").fetchone()[0] == migrations.SCHEMA_VERSION == 5
+        assert store.conn.execute("PRAGMA user_version").fetchone()[0] == migrations.SCHEMA_VERSION == 6
         rows = store.conn.execute("SELECT item_id, rev, hash, prev, at, reason, body FROM revisions").fetchall()
         assert {r[0] for r in rows} == {ids["open"], ids["closed"]}
         for item_id, rev, digest, prev, at, reason, body in rows:
@@ -332,7 +332,7 @@ def test_schema_5_adds_last_used_and_the_revoke_requests_table(tmp_path):
     conn.close()
     store = _open(path)
     try:
-        assert store.conn.execute("PRAGMA user_version").fetchone()[0] == 5
+        assert store.conn.execute("PRAGMA user_version").fetchone()[0] == migrations.SCHEMA_VERSION
         cols = [r[1] for r in store.conn.execute("PRAGMA table_info(owner_keys)")]
         assert cols[-1] == "last_used"
         assert store.conn.execute(f"SELECT {_OLD_OWNER_COLS} FROM owner_keys").fetchall() == before
@@ -357,7 +357,7 @@ def test_a_schema_4_database_also_runs_step_5(tmp_path):
     conn.close()
     store = _open(path)
     try:
-        assert store.conn.execute("PRAGMA user_version").fetchone()[0] == 5
+        assert store.conn.execute("PRAGMA user_version").fetchone()[0] == migrations.SCHEMA_VERSION
         assert "last_used" in [r[1] for r in store.conn.execute("PRAGMA table_info(owner_keys)")]
     finally:
         store.close()

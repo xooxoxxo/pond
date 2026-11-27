@@ -29,9 +29,11 @@ are stored, their bytes in all with the limit, and the keep time.
 """
 import os
 import sys
+import json
 from pathlib import Path
 from typing import Optional
 
+from mailbox.admission import Admission, AdmissionError
 from mailbox import docs as documents
 from mailbox.docs import DOCS_KEEP_DAYS
 from mailbox.service import SETTING_APPENDS_DISABLED, SETTING_CORRECTIONS, SETTING_DOCS
@@ -42,8 +44,35 @@ USAGE = ("usage: python3 -m mailbox.admin corrections on|off|status\n"
          "       python3 -m mailbox.admin docs on|off|status")
 
 
+def admission_command(args):
+    replacing = len(args) == 4 and args[:3] == ["invite", "--recovery", "--replace"]
+    if not replacing and args not in (["devices"], ["invite", "--first"], ["invite", "--recovery"]):
+        print("usage: admission devices | invite --first | invite --recovery [--replace ID]", file=sys.stderr)
+        return 2
+    store = Store(Path(os.environ.get("MAILBOX_DATA_DIR", "/data")) / "mailbox.db")
+    old_mask = os.umask(0o077)
+    try:
+        store.open()
+        admission = Admission(store)
+        if args == ["devices"]:
+            print(json.dumps(admission.operator_devices()))
+        else:
+            grant = admission.operator_invite(args[1][2:], os.environ.get("MAILBOX_PUBLIC_ORIGIN"),
+                                              replace_id=args[3] if replacing else None)
+            print(grant["link"])
+        return 0
+    except AdmissionError as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+    finally:
+        store.close()
+        os.umask(old_mask)
+
+
 def main(argv: Optional[list[str]] = None) -> int:
     args = sys.argv[1:] if argv is None else argv
+    if args[:1] == ["admission"]:
+        return admission_command(args[1:])
     if len(args) != 2 or args[0] not in ("corrections", "appends", "docs") or args[1] not in ("on", "off", "status"):
         print(USAGE, file=sys.stderr)
         return 2
