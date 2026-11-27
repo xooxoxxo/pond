@@ -18,15 +18,15 @@ def load_config(environ: Mapping[str, str]) -> dict[str, Any]:
     missing or unusable, so main() can turn it into a one-line exit and the
     parsing stays testable without an environment or a server.
     """
-    telegram_token = environ.get("TELEGRAM_BOT_TOKEN")
-    if not telegram_token:
+    telegram_token = (environ.get("TELEGRAM_BOT_TOKEN") or "").strip() or None
+    owner_id_str = (environ.get("MAILBOX_OWNER_ID") or "").strip()
+    if owner_id_str and not telegram_token:
         raise ValueError("TELEGRAM_BOT_TOKEN not set")
 
-    owner_id_str = environ.get("MAILBOX_OWNER_ID")
-    if not owner_id_str:
+    if telegram_token and not owner_id_str:
         raise ValueError("MAILBOX_OWNER_ID not set")
     try:
-        owner_id = int(owner_id_str)
+        owner_id = int(owner_id_str) if owner_id_str else None
     except ValueError:
         raise ValueError("MAILBOX_OWNER_ID must be an integer") from None
 
@@ -80,6 +80,8 @@ def load_config(environ: Mapping[str, str]) -> dict[str, Any]:
     # Household mode: members' private chats only, no asks. A malformed value exits: only the household
     # instance sets this key, never the ask channel (S125 is about the asks instance).
     members_raw = (environ.get("MAILBOX_MEMBERS") or "").strip()
+    if members_raw and owner_id is None:
+        raise ValueError("MAILBOX_MEMBERS needs TELEGRAM_BOT_TOKEN and MAILBOX_OWNER_ID")
     members = parse_members(members_raw, owner_id) if members_raw else None
     if members is not None and not (ct_url and ct_token):
         # A household daemon has no other purpose than Central Time; without it every member text would be
@@ -128,10 +130,10 @@ def main() -> None:
 
     try:
         config = load_config(os.environ)
+        server = MailboxServer(**config)
     except ValueError as exc:
         sys.exit(str(exc))
 
-    server = MailboxServer(**config)
     # Never the bot token, never the mailbox token — just where it lives.
     logging.getLogger("mailbox").info(
         "[mailbox] context=%s data=%s backups=%s",

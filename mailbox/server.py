@@ -31,7 +31,7 @@ from mailbox.service import (
     labels_payload,
 )
 from mailbox.store import Store
-from mailbox.telegram import TelegramClient, TelegramError
+from mailbox.telegram import DisabledTelegram, TelegramClient, TelegramError
 
 
 logger = logging.getLogger("mailbox")
@@ -431,9 +431,12 @@ class MailboxHTTPHandler(BaseHTTPRequestHandler):
     def do_health(self) -> None:
         """GET /health — no auth."""
         db_ok = self.server.service.store.health_check()
-        last_poll_age = int(time.time() - self.server.last_poll_time)
-        telegram_ok = last_poll_age < POLL_HEALTH_WINDOW_S   # a poll succeeded within the window
-        ok = telegram_ok and db_ok
+        last_poll_age = None
+        telegram_ok = None
+        if self.server.service.telegram.enabled:
+            last_poll_age = int(time.time() - self.server.last_poll_time)
+            telegram_ok = last_poll_age < POLL_HEALTH_WINDOW_S
+        ok = db_ok and telegram_ok is not False
 
         self.send_json({
             "ok": ok,
@@ -1022,6 +1025,8 @@ class MailboxHTTPHandler(BaseHTTPRequestHandler):
         the same ref sends on the retry). No title or body reaches a log."""
         if not (self.check_auth() or self.check_notify_auth()):
             return self.send_json({"error": "unauthorized"}, 401)
+        if not self.server.service.telegram.enabled:
+            return self.send_json({"error": "Telegram is disabled"}, 503)
         body = self._json_body()
         if body is None:
             return
@@ -1286,8 +1291,8 @@ class MailboxServer:
         self,
         data_dir: Path,
         backup_dir: Path,
-        telegram_token: str,
-        owner_id: int,
+        telegram_token: Optional[str],
+        owner_id: Optional[int],
         context: str,
         port: int = 8790,
         host: str = "0.0.0.0",
@@ -1315,7 +1320,8 @@ class MailboxServer:
         self.store = Store(self.data_dir / "mailbox.db")
         self.store.open()
 
-        self.telegram = TelegramClient(telegram_token, owner_id)
+        self.telegram = (TelegramClient(telegram_token, owner_id) if telegram_token and owner_id is not None
+                         else DisabledTelegram())
         # Capture and reminder acks go to Central Time with the capture addon token; None = capture off.
         self.ct_client = CentralTimeClient(ct_url, ct_token) if ct_url and ct_token else None
         self.zone = household_zone()
@@ -1324,7 +1330,11 @@ class MailboxServer:
         # The token core presents on POST /notify; None = only the mailbox token works there.
         self.notify_token = notify_token
 
-        self.mailbox_token = self._setup_mailbox_token() if self.service.admission.mode != "native" else None
+        admission_mode = self.service.admission.mode
+        if admission_mode != "native" and not self.telegram.enabled:
+            self.store.close()
+            raise ValueError(f"This Pond requires TELEGRAM_BOT_TOKEN and MAILBOX_OWNER_ID in {admission_mode} mode")
+        self.mailbox_token = self._setup_mailbox_token() if admission_mode != "native" else None
 
         self.http_server = MailboxHTTPServer(
             (host, port), self.service, self.mailbox_token, notify_token=self.notify_token
@@ -1467,11 +1477,12 @@ class MailboxServer:
         self.running = True
         self._sweep_docs()
 
-        self.poll_thread = threading.Thread(
-            target=self._poll_loop, name="mailbox-poll", daemon=True
-        )
-        self.poll_thread.start()
-        logger.info("[mailbox] poll thread started")
+        if self.telegram.enabled:
+            self.poll_thread = threading.Thread(
+                target=self._poll_loop, name="mailbox-poll", daemon=True
+            )
+            self.poll_thread.start()
+            logger.info("[mailbox] poll thread started")
 
         self.backup_thread = threading.Thread(
             target=self._backup_loop, name="mailbox-backup", daemon=True
@@ -1490,7 +1501,7 @@ class MailboxServer:
         logger.info(
             "[mailbox] capture: %s, notify: %s (tz %s)%s",
             "enabled" if self.ct_client else "disabled",
-            "enabled" if self.notify_token else "disabled",
+            "enabled" if self.notify_token and self.telegram.enabled else "disabled",
             describe_zone(self.zone),
             mode,
         )
