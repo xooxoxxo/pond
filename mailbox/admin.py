@@ -35,6 +35,8 @@ from typing import Optional
 
 from mailbox.admission import Admission, AdmissionError
 from mailbox import docs as documents
+from mailbox import maintenance
+import sqlite3
 from mailbox.docs import DOCS_KEEP_DAYS
 from mailbox.service import SETTING_APPENDS_DISABLED, SETTING_CORRECTIONS, SETTING_DOCS
 from mailbox.store import Store
@@ -52,6 +54,8 @@ def admission_command(args):
     store = Store(Path(os.environ.get("MAILBOX_DATA_DIR", "/data")) / "mailbox.db")
     old_mask = os.umask(0o077)
     try:
+        if installation := os.environ.get("POND_INSTALL_ID"):
+            maintenance.bound_identity(store.db_path.parent, installation)
         store.open()
         admission = Admission(store)
         if args == ["devices"]:
@@ -71,6 +75,22 @@ def admission_command(args):
 
 def main(argv: Optional[list[str]] = None) -> int:
     args = sys.argv[1:] if argv is None else argv
+    if args == ["status", "--json"]:
+        try:
+            print(json.dumps(maintenance.status(Path(os.environ.get("MAILBOX_DATA_DIR", "/data")))))
+        except (OSError, ValueError, sqlite3.Error):
+            print("Could not read managed Pond status", file=sys.stderr)
+            return 1
+        return 0
+    if args[:1] == ["maintenance"]:
+        try:
+            result = maintenance.command(args[1:], Path(os.environ.get("MAILBOX_DATA_DIR", "/data")),
+                                         Path(os.environ.get("MAILBOX_BACKUP_DIR", "/backups")))
+        except (ValueError, OSError, sqlite3.Error, KeyError) as exc:
+            print(f"Recovery command failed ({type(exc).__name__})", file=sys.stderr)
+            return 1
+        print(json.dumps(result))
+        return 0
     if args[:1] == ["admission"]:
         return admission_command(args[1:])
     if len(args) != 2 or args[0] not in ("corrections", "appends", "docs") or args[1] not in ("on", "off", "status"):

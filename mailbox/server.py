@@ -14,7 +14,7 @@ from typing import Any, Optional
 from urllib.parse import parse_qs, urlparse
 
 from mailbox import PROTOCOL, VERSION, owner
-from mailbox import link_page
+from mailbox import link_page, maintenance
 from mailbox.admission import AdmissionError
 from mailbox.ask_about import Answerer
 from mailbox.clock import describe_zone, household_zone
@@ -111,7 +111,15 @@ class MailboxHTTPHandler(BaseHTTPRequestHandler):
 
     def _route_get(self) -> None:
         """Dispatch a GET."""
+        if self.server.fenced and self.path not in ("/health", "/version"):
+            return self.send_json({"error": "maintenance"}, 503)
         parts = urlparse(self.path).path.split("/")
+        ticket = (self.server.installation and parts == ["", "version"]
+                  and maintenance.consume_ticket(self.client_address[0], self._bearer()))
+        if ticket:
+            return self.do_version(local_probe=True)
+        if self.server.fenced and parts == ["", "version"]:
+            return self.send_json({"error": "maintenance"}, 503)
         self._authorize_path(self.command, parts)
 
         if parts[:2] == ["", "admission"]:
@@ -157,6 +165,8 @@ class MailboxHTTPHandler(BaseHTTPRequestHandler):
 
     def _route_post(self) -> None:
         """Dispatch a POST."""
+        if self.server.fenced:
+            return self.send_json({"error": "maintenance"}, 503)
         parts = urlparse(self.path).path.split("/")
         self._authorize_path(self.command, parts)
 
@@ -431,6 +441,10 @@ class MailboxHTTPHandler(BaseHTTPRequestHandler):
     def do_health(self) -> None:
         """GET /health — no auth."""
         db_ok = self.server.service.store.health_check()
+        managed = {"installation": self.server.installation} if self.server.installation else {}
+        if self.server.fenced:
+            return self.send_json({**managed, "ok": db_ok, "db_ok": db_ok, "fenced": True},
+                                  200 if db_ok else 503)
         last_poll_age = None
         telegram_ok = None
         if self.server.service.telegram.enabled:
@@ -440,19 +454,21 @@ class MailboxHTTPHandler(BaseHTTPRequestHandler):
 
         self.send_json({
             "ok": ok,
-            "telegram_ok": telegram_ok,
+            **managed, "telegram_ok": telegram_ok,
             "db_ok": db_ok,
             "last_poll_age_s": last_poll_age,
         }, 200 if ok else 503)
 
-    def do_version(self) -> None:
+    def do_version(self, *, local_probe=False) -> None:
         """GET /version — the Pond's semver release, the protocol integer that
         0.9.x Hooks and clients still compare, and the features list (1.8.0) that
         new clients gate on: FEATURES, plus "docs" while documents are on (1.10.0).
         No client reads `service`."""
-        if not self.check_auth():
+        if not local_probe and not self.check_auth():
             return self.send_json({"error": "unauthorized"}, 401)
         features = list(self.server.service.features())
+        if self.server.installation:
+            features.append("managedInstall")
         return self.send_json(
             {"service": "pond", "version": VERSION, "protocol": PROTOCOL, "features": features}, 200
         )
@@ -1238,6 +1254,8 @@ class MailboxHTTPServer(ThreadingHTTPServer):
     ):
         super().__init__(address, MailboxHTTPHandler)
         self.service = service
+        self.installation = service.store.get_setting("pond_installation_id")
+        self.fenced = os.environ.get("POND_MAINTENANCE") == "1"
         self.mailbox_token = mailbox_token
         # Opens POST /notify and nothing else; None = only the mailbox token does.
         self.notify_token = notify_token
@@ -1317,6 +1335,8 @@ class MailboxServer:
 
         # One Store, shared by the poll thread and every request thread
         # (Ruling S7): its RLock serializes all access to the connection.
+        if installation := os.environ.get("POND_INSTALL_ID"):
+            maintenance.bound_identity(self.data_dir, installation)
         self.store = Store(self.data_dir / "mailbox.db")
         self.store.open()
 
@@ -1475,6 +1495,9 @@ class MailboxServer:
     def start(self) -> None:
         """Sweep expired documents once, start the threads, then serve HTTP until stop()."""
         self.running = True
+        if self.http_server.fenced:
+            self.http_server.serve_forever()
+            return
         self._sweep_docs()
 
         if self.telegram.enabled:
