@@ -85,6 +85,8 @@ def _parse_retry_after(body: dict[str, Any], headers: Any) -> int:
 class TelegramClient:
     """Outbound long-polling Telegram bot over urllib."""
 
+    enabled = True
+
     def __init__(self, bot_token: str, owner_id: int):
         self.bot_token = bot_token
         self.owner_id = owner_id
@@ -799,6 +801,21 @@ NOTIFICATION_OUTCOMES = {
     "decline": ("↩️", "declined"),
     "stale": ("🚫", "changed in Central Time"),
 }
+
+
+class DisabledTelegram(TelegramClient):
+    """A native Pond has no Telegram endpoint or delivery receipts."""
+
+    enabled = False
+
+    def __init__(self):
+        self.owner_id = None
+
+    def _call(self, method: str, **params) -> dict[str, Any]:
+        return {}
+
+    def download_file(self, file_path: str, max_bytes: int) -> bytes:
+        raise TelegramError("Telegram is disabled")
 
 
 class FakeTelegramClient(TelegramClient):

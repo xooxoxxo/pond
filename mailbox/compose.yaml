@@ -23,7 +23,7 @@ services:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8790/health"]
       interval: 30s
       timeout: 3s
-      start_period: 90s   # /health is 503 until the first successful Telegram poll
+      start_period: 90s   # a configured Telegram bot needs time for its first poll
 
 volumes:
   mailbox-data:
