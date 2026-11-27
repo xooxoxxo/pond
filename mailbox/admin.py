@@ -54,6 +54,8 @@ def admission_command(args):
     store = Store(Path(os.environ.get("MAILBOX_DATA_DIR", "/data")) / "mailbox.db")
     old_mask = os.umask(0o077)
     try:
+        if installation := os.environ.get("POND_INSTALL_ID"):
+            maintenance.bound_identity(store.db_path.parent, installation)
         store.open()
         admission = Admission(store)
         if args == ["devices"]:

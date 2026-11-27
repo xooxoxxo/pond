@@ -114,6 +114,12 @@ class MailboxHTTPHandler(BaseHTTPRequestHandler):
         if self.server.fenced and self.path not in ("/health", "/version"):
             return self.send_json({"error": "maintenance"}, 503)
         parts = urlparse(self.path).path.split("/")
+        ticket = (self.server.installation and parts == ["", "version"]
+                  and maintenance.consume_ticket(self.client_address[0], self._bearer()))
+        if ticket:
+            return self.do_version(local_probe=True)
+        if self.server.fenced and parts == ["", "version"]:
+            return self.send_json({"error": "maintenance"}, 503)
         self._authorize_path(self.command, parts)
 
         if parts[:2] == ["", "admission"]:
@@ -450,18 +456,16 @@ class MailboxHTTPHandler(BaseHTTPRequestHandler):
             "last_poll_age_s": last_poll_age,
         }, 200 if ok else 503)
 
-    def do_version(self) -> None:
+    def do_version(self, *, local_probe=False) -> None:
         """GET /version — the Pond's semver release, the protocol integer that
         0.9.x Hooks and clients still compare, and the features list (1.8.0) that
         new clients gate on: FEATURES, plus "docs" while documents are on (1.10.0).
         No client reads `service`."""
-        ticket = self.server.installation and maintenance.consume_ticket(self.client_address[0], self._bearer())
-        if not ticket:
-            if self.server.fenced:
-                return self.send_json({"error": "maintenance"}, 503)
-            if not self.check_auth():
-                return self.send_json({"error": "unauthorized"}, 401)
+        if not local_probe and not self.check_auth():
+            return self.send_json({"error": "unauthorized"}, 401)
         features = list(self.server.service.features())
+        if self.server.installation:
+            features.append("managedInstall")
         return self.send_json(
             {"service": "pond", "version": VERSION, "protocol": PROTOCOL, "features": features}, 200
         )
@@ -1245,7 +1249,7 @@ class MailboxHTTPServer(ThreadingHTTPServer):
     ):
         super().__init__(address, MailboxHTTPHandler)
         self.service = service
-        self.installation = os.environ.get("POND_INSTALL_ID")
+        self.installation = service.store.get_setting("pond_installation_id")
         self.fenced = os.environ.get("POND_MAINTENANCE") == "1"
         self.mailbox_token = mailbox_token
         # Opens POST /notify and nothing else; None = only the mailbox token does.
@@ -1326,6 +1330,8 @@ class MailboxServer:
 
         # One Store, shared by the poll thread and every request thread
         # (Ruling S7): its RLock serializes all access to the connection.
+        if installation := os.environ.get("POND_INSTALL_ID"):
+            maintenance.bound_identity(self.data_dir, installation)
         self.store = Store(self.data_dir / "mailbox.db")
         self.store.open()
 

@@ -89,6 +89,8 @@ def test_managed_status_reads_real_version_and_a_one_use_credential_only_works_t
     from mailbox import maintenance
     monkeypatch.setenv("POND_INSTALL_ID", OP)
     monkeypatch.setenv("MAILBOX_DATA_DIR", str(tmp_path / "data"))
+    (tmp_path / "data").mkdir()
+    maintenance.initialize(tmp_path / "data")
     running = _running(tmp_path, native=True)
     srv, base, _ = next(running)
     monkeypatch.setenv("MAILBOX_PORT", str(srv.port))
@@ -113,6 +115,9 @@ def test_fenced_candidate_exposes_only_probes_and_has_no_background_workers(tmp_
     from mailbox.tests.test_server import call
     monkeypatch.setenv("POND_INSTALL_ID", OP)
     monkeypatch.setenv("POND_MAINTENANCE", "1")
+    from mailbox import maintenance
+    (tmp_path / "data").mkdir()
+    maintenance.initialize(tmp_path / "data")
     srv = MailboxServer(tmp_path / "data", tmp_path / "backup", "synthetic", 1,
                         "personal", port=0, host="127.0.0.1")
     thread = threading.Thread(target=srv.start)
@@ -152,3 +157,39 @@ def test_candidate_probe_exercises_data_and_checks_bot_without_polling(tmp_path,
     methods.clear()
     maintenance.probe(data)
     assert not methods
+def test_managed_database_identity_refuses_missing_or_swapped_database(tmp_path, monkeypatch):
+    from mailbox import maintenance
+    from mailbox.server import MailboxServer
+    data = tmp_path / "data"
+    data.mkdir()
+    monkeypatch.setenv("POND_INSTALL_ID", OP)
+    monkeypatch.setenv("MAILBOX_DATA_DIR", str(data))
+    def server():
+        return MailboxServer(data, tmp_path / "backups", "synthetic", 1, "test", port=0)
+    with pytest.raises(ValueError):
+        server()
+    assert not (data / "mailbox.db").exists()
+    assert admin.main(["maintenance", "initialize"]) == 0
+    srv = server()
+    assert srv.http_server.installation == OP
+    srv.stop()
+    assert admin.main(["maintenance", "initialize"]) == 0
+    monkeypatch.setenv("POND_INSTALL_ID", "c"*32)
+    assert admin.main(["maintenance", "initialize"]) == 1
+    with pytest.raises(ValueError):
+        server()
+
+
+def test_offline_snapshot_of_clean_wal_and_protected_file_rotation(tmp_path, monkeypatch):
+    from mailbox import maintenance
+    data, backups, db = prepare(tmp_path, monkeypatch)
+    db.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+    db.close()
+    for suffix in ("-wal", "-shm"):
+        (data / ("mailbox.db" + suffix)).unlink(missing_ok=True)
+    assert not (data / "mailbox.db-wal").exists()
+    first = maintenance.snapshot(data, backups, OP)
+    (data / "mailbox-token").write_text("rotated synthetic credential")
+    second = maintenance.snapshot(data, backups, "c"*32)
+    assert first != second
+    assert first["contents"] == second["contents"]

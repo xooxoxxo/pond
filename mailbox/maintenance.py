@@ -35,9 +35,11 @@ def files(directory):
             yield path.relative_to(directory)
 
 
-def hashes(directory):
+def hashes(directory, *, protected_only=False):
     result = {}
     for name in files(directory):
+        if protected_only and str(name) in SIDECARS | {DATABASE}:
+            continue
         with (directory / name).open("rb") as stream:
             result[str(name)] = hashlib.file_digest(stream, "sha256").hexdigest()
     return result
@@ -58,6 +60,10 @@ def database_info(path):
         for line in db.iterdump():
             logical.update(line.encode() + b"\x00")
     return {"schema": schema, "counts": counts, "contents": logical.hexdigest()}
+
+
+def recovery_info(directory):
+    return dict(database_info(directory / DATABASE), protected=hashes(directory, protected_only=True))
 
 
 def copy_private(source, dest):
@@ -82,12 +88,20 @@ def snapshot(data, backups, op):
         for name in files(data):
             if str(name) not in SIDECARS and str(name) != DATABASE:
                 copy_private(data / name, dest / name)
-        with closing(sqlite3.connect((data / DATABASE).as_uri() + "?mode=ro", uri=True)) as source:
-            with closing(sqlite3.connect(dest / DATABASE)) as backup:
-                source.backup(backup)
-                backup.execute("PRAGMA journal_mode=DELETE")
+        # The orchestrator has stopped and excluded every volume writer. Stage
+        # the complete offline recovery set on writable storage: a clean WAL
+        # database can require a new shm even for a read-only connection.
+        with tempfile.TemporaryDirectory(dir=tmp) as stage_name:
+            stage = Path(stage_name)
+            for name in (DATABASE, DATABASE + "-wal", DATABASE + "-journal"):
+                if (data / name).exists():
+                    copy_private(data / name, stage / name)
+            with closing(sqlite3.connect((stage / DATABASE).as_uri() + "?mode=rw", uri=True)) as source:
+                with closing(sqlite3.connect(dest / DATABASE)) as backup:
+                    source.backup(backup)
+                    backup.execute("PRAGMA journal_mode=DELETE")
         (dest / DATABASE).chmod(0o600)
-        manifest = {"database": database_info(dest / DATABASE), "files": hashes(dest)}
+        manifest = {"database": recovery_info(dest), "files": hashes(dest)}
         record = tmp / "manifest.json"
         record.write_text(json.dumps(manifest, sort_keys=True))
         record.chmod(0o600)
@@ -108,7 +122,7 @@ def check(backups, op):
     saved = backups / op
     source = saved / "data"
     record = json.loads((saved / "manifest.json").read_text())
-    if hashes(source) != record["files"] or database_info(source / DATABASE) != record["database"]:
+    if hashes(source) != record["files"] or recovery_info(source) != record["database"]:
         raise ValueError("Recovery materials failed verification")
     return record["database"]
 
@@ -121,10 +135,40 @@ def restore(data, backups, op):
     for name in files(source):
         copy_private(source / name, data / name)
     sync(data)
-    return database_info(data / DATABASE)
+    return recovery_info(data)
+
+
+def bound_identity(data, expected):
+    if not expected or not re.fullmatch("[0-9a-f]{32}", expected):
+        raise ValueError("Invalid managed installation ID")
+    path = data / DATABASE
+    if not path.is_file() or path.is_symlink():
+        raise ValueError("Missing managed Pond database")
+    with closing(sqlite3.connect(path.as_uri() + "?mode=ro", uri=True)) as db:
+        row = db.execute("SELECT value FROM settings WHERE key='pond_installation_id'").fetchone()
+    if row != (expected,):
+        raise ValueError("Database belongs to another installation")
+    return row[0]
+
+
+def initialize(data):
+    expected = os.environ.get("POND_INSTALL_ID")
+    if not expected or not re.fullmatch("[0-9a-f]{32}", expected):
+        raise ValueError("Invalid managed installation ID")
+    if not any(data.iterdir()):
+        from mailbox.store import Store
+        store = Store(data / DATABASE)
+        try:
+            store.open()
+            store.set_setting("pond_installation_id", expected)
+        finally:
+            store.close()
+    return {"installation": bound_identity(data, expected)}
 
 
 def command(args, data, backups):
+    if args == ["initialize"]:
+        return initialize(data)
     if args == ["probe"] and os.environ.get("POND_MAINTENANCE") == "1":
         return probe(data)
     if len(args) != 2 or args[0] not in ("snapshot", "restore", "check") or not re.fullmatch("[0-9a-f]{32}", args[1]):
@@ -200,7 +244,7 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
 
 def probe(data):
     path = data / DATABASE
-    info = database_info(path)
+    info = recovery_info(data)
     with closing(sqlite3.connect(path.as_uri() + "?mode=rw", uri=True)) as db:
         db.execute("SELECT id FROM items LIMIT 1").fetchone()
         db.execute("BEGIN IMMEDIATE")

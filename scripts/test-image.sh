@@ -68,5 +68,8 @@ echo "test-image: linux/$arch /health: ${health:-<no answer>}"
 jq -e '.db_ok == true and (.telegram_ok | type) == "boolean" and has("ok")' <<<"$health" >/dev/null \
   || { echo "test-image: linux/$arch /health is not a health report with db_ok true" >&2; exit 1; }
 
+# Gate the published management feature on a real default startup of this image.
+docker run --rm -i --platform "linux/$arch" --network none "$img" python3 - "$version" < "$here/test-managed-image.py"
+
 docker save "$img" -o "$tmp/image.tar"
 python3 "$here/check-image-files.py" "$tmp/image.tar" --dockerfile "$here/../mailbox/Dockerfile"
