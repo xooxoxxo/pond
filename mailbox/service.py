@@ -1766,7 +1766,7 @@ class Service:
         """List open asks from the last N days, newest first."""
         return self.store.list_items(status="open", days=days)
 
-    def get_item_with_events(self, item_id: str) -> tuple[Optional[Item], list[dict[str, Any]]]:
+    def get_item_with_events(self, item_id: str, *, for_agent: bool = False) -> tuple[Optional[Item], list[dict[str, Any]]]:
         """Fetch an item and its full event history.
 
         Uses Store.events_for_item, which has no store-wide window — Finding
@@ -1778,7 +1778,7 @@ class Service:
         if not item:
             return None, []
 
-        events = self.store.events_for_item(item_id)
+        events = self.store.events_for_item(item_id, for_agent=for_agent)
         item_events = [
             {
                 "seq": e.seq,

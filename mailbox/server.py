@@ -408,14 +408,22 @@ class MailboxHTTPHandler(BaseHTTPRequestHandler):
     def _wire(self, item, *, with_history: bool = False, requirements: bool = False) -> dict[str, Any]:
         """`requirements` only on answers that carry one item, never on GET /asks (RD 15)."""
         protocol = self._client_protocol()
-        return self.server.service.wire_item(
+        wire = self.server.service.wire_item(
             item, revisions=protocol >= REVISIONS_FROM, with_history=with_history,
             requirements=requirements, choice_objects=protocol >= CHOICES_FROM)
+
+        return self._visible_item(wire)
+
+    def _visible_item(self, wire):
+        if self.agent_id:
+            wire["payload"].pop("tg_chat_id", None)
+            wire["payload"].pop("tg_message_id", None)
+        return wire
 
     def _plain_wire(self, item) -> dict[str, Any]:
         """Item.to_wire() for the answers that keep its shape (ack, steps, reply), with
         choice objects as labels for a client before protocol 6."""
-        wire = item.to_wire()
+        wire = self._visible_item(item.to_wire())
         return wire if self._client_protocol() >= CHOICES_FROM else labels_payload(wire)
 
     # --- routes ---
@@ -509,7 +517,7 @@ class MailboxHTTPHandler(BaseHTTPRequestHandler):
             return self.send_json({"error": "missing fields"}, 400)
 
         # An absent context can never match the daemon's, so it lands here too.
-        if body.get("context") != self.server.service.context:
+        if not self.principal and body.get("context") != self.server.service.context:
             return self.send_json({"error": "wrong context"}, 403)
 
         try:
@@ -553,7 +561,7 @@ class MailboxHTTPHandler(BaseHTTPRequestHandler):
         project_problems = validate_project(project)
         if project_problems:
             return self.send_json({"error": "invalid project", "details": project_problems}, 400)
-        if body.get("context") != self.server.service.context:
+        if not self.principal and body.get("context") != self.server.service.context:
             return self.send_json({"error": "wrong context"}, 403)
         try:
             item, resp = self.server.service.post_bug(project, instructable, signature, docs=body.get("docs"))
@@ -590,7 +598,7 @@ class MailboxHTTPHandler(BaseHTTPRequestHandler):
         if not self.check_auth():
             return self.send_json({"error": "unauthorized"}, 401)
 
-        item, events = self.server.service.get_item_with_events(item_id)
+        item, events = self.server.service.get_item_with_events(item_id, for_agent=bool(self.agent_id))
         if not item:
             return self.send_json({"error": "not found"}, 404)
 

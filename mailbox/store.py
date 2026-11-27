@@ -560,6 +560,8 @@ class Store:
     # Events with their side-table metadata (rev, auth), NULL when there is none.
     _EVENTS = "SELECT e.*, m.rev, m.auth FROM events e LEFT JOIN event_meta m ON m.seq = e.seq"
 
+    _AGENT_EVENTS = " AND e.kind NOT IN ('ask_about_question','ask_about_answer')"
+
     def read_events(self, after_seq: int = 0, limit: int = 100, *, principal_id: Optional[str] = None) -> tuple[list[Event], int]:
         """Events after seq, newest first; return (events, next_cursor)."""
         with self._lock:
@@ -567,6 +569,7 @@ class Store:
             args = [after_seq]
             if principal_id is not None:
                 query += " AND e.item_id IN (SELECT item_id FROM ask_ownership WHERE principal_id=?)"
+                query += self._AGENT_EVENTS
                 args.append(principal_id)
             cursor = self.conn.execute(query + " ORDER BY e.seq ASC LIMIT ?", (*args, limit + 1))
             rows = cursor.fetchall()
@@ -575,13 +578,13 @@ class Store:
             next_cursor = events[-1].seq if events else after_seq
             return events, next_cursor
 
-    def events_for_item(self, item_id: str) -> list[Event]:
+    def events_for_item(self, item_id: str, *, for_agent: bool = False) -> list[Event]:
         """All events for one item, in seq order — unlike read_events, this
         has no store-wide window, so a busy store (many events on OTHER
         items) can never push an item's own history out of view (S25)."""
         with self._lock:
             cursor = self.conn.execute(
-                f"{self._EVENTS} WHERE e.item_id = ? ORDER BY e.seq",
+                self._EVENTS + " WHERE e.item_id = ?" + (self._AGENT_EVENTS if for_agent else "") + " ORDER BY e.seq",
                 (item_id,),
             )
             rows = cursor.fetchall()

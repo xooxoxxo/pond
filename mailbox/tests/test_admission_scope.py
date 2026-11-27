@@ -72,3 +72,26 @@ def test_revocation_takes_effect_on_the_next_request(pond):
         assert call(pond.base_url, path, token="pending")[0] == 403
     assert call(pond.base_url, "/admission/me", token="pending")[1]["status"] == "pending"
     assert call(pond.base_url, "/asks", token="agent-b")[0] == 200
+
+
+def test_agent_responses_hide_owner_conversations_and_delivery_ids(pond):
+    url = pond.base_url
+    code, posted = post_ask(url, "agent-a")
+    assert code == 201
+    pid = posted["item"]["id"]
+    for kind in ("ask_about_question", "ask_about_answer"):
+        pond.srv.store.append_event(pid, kind, "owner", "Private conversation")
+    ack = call(url, f"/asks/{pid}/ack", method="POST", token="agent-a")[1]
+    for item in (posted["item"], ack["item"]):
+        assert not {"tg_chat_id", "tg_message_id"}.intersection(item["payload"])
+    for route in (f"/asks/{pid}", "/events"):
+        events = call(url, route, token="agent-a")[1]["events"]
+        assert all(e["text"] != "Private conversation" for e in events)
+        assert any(e["text"] == "Private conversation" for e in call(url, route, token="desktop")[1]["events"])
+
+
+def test_native_post_uses_pond_context(pond):
+    pond.srv.service.context = "team"
+    code, posted = post_ask(pond.base_url, "agent-a", context="personal")
+    assert code == 201
+    assert posted["item"]["lane"] == "team"
