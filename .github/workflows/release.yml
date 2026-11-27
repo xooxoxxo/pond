@@ -297,6 +297,7 @@ jobs:
             echo
             echo "Image: \`$IMAGE_REPO:$VERSION\`"
             echo "Digest: \`$DIGEST\` (one index: linux/amd64, linux/arm64)"
+            python3 -c 'from mailbox import FEATURES, ADMISSION_FEATURE; print("Features:", *FEATURES, ADMISSION_FEATURE)'
             echo "Works with Hook: <the newest Hook releases whose notes carry <!-- hook:pond=RANGE --> with $VERSION in RANGE, e.g. ^1.5.0>; protocol $(sed -n 's/^PROTOCOL = //p' mailbox/__init__.py) for Hook 0.9.x"
             echo
             echo "## Changes"
