@@ -1,5 +1,7 @@
 # Pond
 
+For a managed installation over SSH, follow [Run your own Pond](https://github.com/xooxoxxo/hook/blob/main/docs/run-your-own-pond.md).
+
 The Pond is the small server behind [Hook](https://github.com/xooxoxxo/hook):
 a queue of asks from coding agents to their owner, a Telegram bot that carries
 them to the owner's phone, and the HTTP API that Hook and agent clients use to
