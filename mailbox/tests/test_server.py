@@ -1028,7 +1028,7 @@ def test_load_config_overrides():
 @pytest.mark.parametrize(
     "env,message",
     [
-        ({}, "TELEGRAM_BOT_TOKEN not set"),
+        ({"MAILBOX_MEMBERS": "1"}, "MAILBOX_MEMBERS needs TELEGRAM_BOT_TOKEN and MAILBOX_OWNER_ID"),
         ({"MAILBOX_OWNER_ID": "1"}, "TELEGRAM_BOT_TOKEN not set"),
         ({"TELEGRAM_BOT_TOKEN": "t"}, "MAILBOX_OWNER_ID not set"),
         ({**BASE_ENV, "MAILBOX_OWNER_ID": "abc"}, "MAILBOX_OWNER_ID must be an integer"),
@@ -1048,12 +1048,13 @@ def test_load_config_rejects_bad_env(env, message):
 
 
 def test_module_entrypoint_exits_with_a_message(tmp_path):
-    """`python3 -m mailbox` with nothing configured exits 1 with one line —
+    """`python3 -m mailbox` with a half-configured bot exits 1 with one line —
     not a traceback. Nothing is started: it fails before any server exists."""
     env = {
         k: v for k, v in os.environ.items()
         if not k.startswith("MAILBOX_") and k != "TELEGRAM_BOT_TOKEN"
     }
+    env["MAILBOX_OWNER_ID"] = "1"
     proc = subprocess.run(
         [sys.executable, "-m", "mailbox"],
         cwd=REPO_ROOT, env=env, capture_output=True, text=True, timeout=30,

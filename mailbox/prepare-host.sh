@@ -6,8 +6,8 @@
 # `backups/` holds the mirrored mailbox token plus nightly snapshots -- so it
 # has to be locked down on the host before the stack ever starts.
 #
-# Refuses to proceed unless .env exists, is mode 600, and has all four
-# required keys (values are never printed). Run this once, before the first
+# Refuses to proceed unless .env exists, is mode 600, and has the required
+# host settings and either both Telegram credentials or neither (values are never printed). Run this once, before the first
 # `docker compose up --build -d`. Safe to re-run any time.
 set -euo pipefail
 
@@ -18,7 +18,7 @@ if [ "$#" -ne 0 ]; then
 fi
 ENV_FILE="$SCRIPT_DIR/.env"
 BACKUPS_DIR="$SCRIPT_DIR/backups"
-REQUIRED_KEYS="TELEGRAM_BOT_TOKEN MAILBOX_OWNER_ID MAILBOX_CONTEXT TZ"
+REQUIRED_KEYS="MAILBOX_CONTEXT TZ"
 
 # The real, non-root user who should own backups/. When invoked via sudo,
 # that's the person who ran sudo (SUDO_USER) -- not root.
@@ -39,7 +39,7 @@ stat_uid() {
     stat -c '%u' "$1" 2>/dev/null || stat -f '%u' "$1"
 }
 
-# Refuse without a 600 .env carrying all four required keys.
+# Refuse without a private .env.
 if [ ! -f "$ENV_FILE" ]; then
     echo "ERROR: $ENV_FILE not found -- copy $(basename "$ENV_FILE").example to $(basename "$ENV_FILE") and fill it in" >&2
     exit 2
@@ -52,13 +52,35 @@ if [ "$env_perms" != "600" ]; then
 fi
 echo "[prepare-host] $ENV_FILE is 600"
 
+# Check presence without sourcing .env or passing its secrets as arguments.
+# The final assignment wins. Empty quoted values and inline comments are allowed.
+has_value() {
+    awk -v key="$1" '
+        $0 ~ "^[[:space:]]*(export[[:space:]]+)?" key "[[:space:]]*=" {
+            value = $0
+            sub(/^[^=]*=/, "", value)
+            sub(/[[:space:]]+#.*/, "", value)
+            gsub(/^[[:space:]]+|[[:space:]]+$/, "", value)
+            present = value != "" && value !~ /^"[[:space:]]*"$/ && value !~ /^\047[[:space:]]*\047$/
+        }
+        END { exit !present }
+    ' "$ENV_FILE"
+}
+
 for key in $REQUIRED_KEYS; do
-    if ! grep -q "^${key}=" "$ENV_FILE"; then
+    if ! has_value "$key"; then
         echo "ERROR: $ENV_FILE is missing required key $key" >&2
         exit 2
     fi
 done
-echo "[prepare-host] $ENV_FILE has all required keys"
+
+if has_value TELEGRAM_BOT_TOKEN; then has_token=1; else has_token=0; fi
+if has_value MAILBOX_OWNER_ID; then has_owner=1; else has_owner=0; fi
+if [ "$has_token" != "$has_owner" ]; then
+    echo "ERROR: set both TELEGRAM_BOT_TOKEN and MAILBOX_OWNER_ID, or leave both empty to disable Telegram" >&2
+    exit 2
+fi
+echo "[prepare-host] $ENV_FILE has all required settings"
 
 if [ ! -d "$BACKUPS_DIR" ]; then
     mkdir -p "$BACKUPS_DIR"

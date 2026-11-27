@@ -419,15 +419,17 @@ class Service:
 
         # Send to Telegram. TelegramError propagates to the caller, which
         # decides retry/rollback — nothing has been written to the store yet.
-        text = (TelegramClient.render_alert(project, ask, instructable) if self.telegram_mode == "alert"
-                else TelegramClient.render_ask_message(project, ask, why, cmd, link, instructable))
-        # A new ask has nothing finished yet: Done waits when it has requirements.
-        keyboard = (TelegramClient.alert_keyboard(item_id, self.open_base) if self.telegram_mode == "alert"
-                    else self.telegram.ask_keyboard(item_id, self.open_base, instructable,
-                                                    ready=not req.wanted(instructable)))
-        response = self.telegram.send_message(
-            self.telegram.owner_id, text, reply_markup=keyboard
-        )
+        response = {}
+        if self.telegram.enabled:
+            text = (TelegramClient.render_alert(project, ask, instructable) if self.telegram_mode == "alert"
+                    else TelegramClient.render_ask_message(project, ask, why, cmd, link, instructable))
+            # A new ask has nothing finished yet: Done waits when it has requirements.
+            keyboard = (TelegramClient.alert_keyboard(item_id, self.open_base) if self.telegram_mode == "alert"
+                        else self.telegram.ask_keyboard(item_id, self.open_base, instructable,
+                                                        ready=not req.wanted(instructable)))
+            response = self.telegram.send_message(
+                self.telegram.owner_id, text, reply_markup=keyboard
+            )
 
         # Store the message id and insert the item, its revision 1, its edit key
         # hash, the posted event and the message row, in one transaction.

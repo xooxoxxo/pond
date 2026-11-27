@@ -3,14 +3,14 @@
 For a managed installation over SSH, follow [Run your own Pond](https://github.com/xooxoxxo/hook/blob/main/docs/run-your-own-pond.md).
 
 The Pond is the small server behind [Hook](https://github.com/xooxoxxo/hook):
-a queue of asks from coding agents to their owner, a Telegram bot that carries
-them to the owner's phone, and the HTTP API that Hook and agent clients use to
-post, read and answer them. It is one Python process with SQLite storage and no
-third-party Python dependencies, shipped as a single container.
+a queue where coding agents post asks and the owner reads and answers them
+in Hook. Owners can also connect a Telegram bot. The Pond runs as one Python
+process with SQLite storage and ships as a single container.
 
-One Pond serves one owner and one context (for example `personal`): one
-Telegram bot, one queue, one API token. The Python package is `mailbox/`
-(`python3 -m mailbox`), and environment variables keep their `MAILBOX_` prefix.
+One Pond serves one owner and one context (for example `personal`). On a
+fresh install, each admitted device and agent has its own credential. The
+Python package is `mailbox/` (`python3 -m mailbox`), and environment variables
+keep their `MAILBOX_` prefix.
 
 Licensed under the MIT License (see `LICENSE`). Security reports: see
 `SECURITY.md`.
@@ -26,7 +26,8 @@ device before revoking the lost one. When all ten slots are occupied, use the lo
 command to identify the lost device, then use `admission invite --recovery --replace ID`. The Pond
 revokes only that device when its replacement proves possession of its key. Treat the whole link as a credential.
 
-Schema 6 keeps upgraded installations in legacy mode. Existing clients retain their shared-token flow.
+Schema 6 keeps upgraded installations in legacy mode. Those installations still require both
+Telegram credentials and retain their shared-token flow.
 An authenticated native connection advertises `admission` in `GET /version`.
 
 ## Versions
@@ -40,18 +41,19 @@ and its clients, which compare that integer.
 
 ## Run it
 
-You need Docker with Compose, a Telegram bot token from
-[@BotFather](https://t.me/BotFather), and the owner's numeric Telegram user id.
+You need Docker with Compose and an HTTPS origin your clients can reach.
 
 1. Copy the `mailbox/` folder of this repository to the host, for example
    `git clone https://github.com/xooxoxxo/pond.git && cd pond/mailbox`.
-2. Write `.env` next to `compose.yaml` from `.env.example` (mode 600) with at
-   least `TELEGRAM_BOT_TOKEN`, `MAILBOX_OWNER_ID`, `MAILBOX_CONTEXT` and `TZ`.
-   Never commit it.
+2. Copy `.env.example` to `.env` next to `compose.yaml`, run `chmod 600 .env`,
+   and set `MAILBOX_CONTEXT`, `TZ` and `MAILBOX_PUBLIC_ORIGIN`. For Telegram
+   delivery, also set `TELEGRAM_BOT_TOKEN` and `MAILBOX_OWNER_ID`. Leave both
+   unset to receive and answer asks in Hook alone. Keep `.env` private.
 3. `sudo ./prepare-host.sh` sets `backups/` to 700, owned by you, and refuses
-   to continue without a 600 `.env` carrying those four keys. Safe to re-run.
-4. `docker compose up --build -d`. `/health` returns 503 until the first
-   successful Telegram poll, then 200. The image creates `/data` and
+   to continue if either required host setting is empty or only one Telegram
+   credential is present. It is safe to re-run.
+4. Run `docker compose up --build -d`. With Telegram disabled, a healthy
+   database makes `/health` ready immediately. The image creates `/data` and
    `/backups` owned by uid 1000 so a fresh named volume is writable by the
    daemon. Check the container clock: `docker compose exec -T mailbox date`
    prints the local time of `TZ`, and the startup line reads, for example with
@@ -59,8 +61,8 @@ You need Docker with Compose, a Telegram bot token from
    daemon resolved with its offset, not the `TZ` value. The image pins
    `tzdata` for that; without it musl would run any other zone as UTC in
    silence.
-5. Configure an HTTPS reverse proxy for port 8790. Set `MAILBOX_PUBLIC_ORIGIN` to that origin
-   in the container environment, then follow the device admission steps above.
+5. Configure an HTTPS reverse proxy for port 8790 at your public origin,
+   then follow the device admission steps above.
 6. From the admitted client, fetch `GET /version` with its bearer to verify the connection.
 
 On upgraded installations in legacy mode, clients still read the shared credential copied
@@ -71,8 +73,8 @@ Health, link pages and admission claims have their own authentication rules.
 
 | Variable | Required | Meaning |
 |---|---|---|
-| `TELEGRAM_BOT_TOKEN` | yes | The bot's token from @BotFather. |
-| `MAILBOX_OWNER_ID` | yes | The owner's numeric Telegram user id. Updates from anyone else are dropped and counted. |
+| `TELEGRAM_BOT_TOKEN` | for Telegram | The bot token from @BotFather. Set it together with `MAILBOX_OWNER_ID`. |
+| `MAILBOX_OWNER_ID` | for Telegram | The owner's numeric Telegram user id. Updates from anyone else are dropped and counted. |
 | `MAILBOX_CONTEXT` | yes | The context name this Pond serves, for example `personal`. A post for another context is `403`. |
 | `TZ` | yes | IANA zone for the nightly backup and for capture dates. Compose refuses to start without it. |
 | `MAILBOX_PUBLIC_ORIGIN` | for invites | External HTTPS origin included in locally minted join links. |
@@ -81,7 +83,7 @@ Health, link pages and admission claims have their own authentication rules.
 | `MAILBOX_IMAGE` | no | Image tag `compose.yaml` builds and runs, default `pond:local`. |
 | `MAILBOX_DATA_DIR`, `MAILBOX_BACKUP_DIR` | no | Default `/data` and `/backups` (set by `compose.yaml`). |
 | `MAILBOX_RELAY_OPEN_BASE` | no | Public link base such as `https://pond.example/i`: adds "📋 Open in Hook" to each ask and `openUrl` to `POST /asks` answers. |
-| `MAILBOX_TELEGRAM_MODE` | no | `full` (default) or `alert`; see below. |
+| `MAILBOX_TELEGRAM_MODE` | no | When Telegram is enabled, choose `full` (default) or `alert`. |
 | `MAILBOX_CT_URL`, `MAILBOX_CT_TOKEN` | no | Capture into a Central Time install (both or neither). |
 | `MAILBOX_NOTIFY_TOKEN` | no | A token that opens `POST /notify` only. |
 | `MAILBOX_HOST_GATEWAY` | no | The host's LAN address, when `host.docker.internal` is filtered. |
@@ -119,9 +121,11 @@ document already stored.
 
 ## API
 
-All endpoints except public `GET /health` and `GET /i/<uuid>` require
-`Authorization: Bearer <mailbox-token>` and answer `401` without it.
-`GET /version` also requires the token.
+Native clients send their device or agent credential in the Authorization
+bearer header, including for `GET /version`. An agent can read its own asks
+and answers. Devices can also answer asks and manage admission. Legacy
+clients use the shared mailbox token. Health and launch pages are public.
+A client claims an invite by posting it to `/admission/claim`.
 
 | Method | Path | Purpose | Status codes |
 |---|---|---|---|
@@ -251,7 +255,7 @@ else `409 {"error": "ask was corrected", "rev", "hash", "acceptedRev"}`. Skip
 rev of the message they are on from rev 2 on (`d:<id>:2`); a rev-1 message has the
 1.0.0 buttons (`d:<id>`), which a rollback still reads.
 
-Trust model: one owner. Owner acts (`/reply`, `/answers`, `/progress`, an owner `/resolve` or
+On legacy installations, owner acts (`/reply`, `/answers`, `/progress`, an owner `/resolve` or
 `/reopen`) need Hook's owner key (`X-Hook-Owner-Key`) once enforcement is on, and
 `/accept`, `/problems` and a bug's `POST /asks` always do; the token alone can post, amend with an edit
 key once corrections are on, and read. Enforcement is off by default. The regular
@@ -261,21 +265,25 @@ duplicate JSON key is `400 invalid json`.
 
 ## Health
 
-`GET /health` is `200` when both are true, else `503`:
-- The last successful Telegram poll was less than 120s ago (so a broken bot
-  token or a stalled poll loop shows as unhealthy, not silently stuck).
-- The SQLite database is readable and writable.
+`GET /health` checks that SQLite is readable and writable. With Telegram
+disabled, this check alone determines readiness. A healthy response is HTTP
+200 with `{"ok":true,"db_ok":true,"telegram_ok":null,"last_poll_age_s":null}`.
+An unavailable database gives HTTP 503. While Telegram is disabled, a valid
+integration credential receives HTTP 503 from `POST /notify`. Native asks,
+answers and device approvals remain available.
 
-It stays `503` from a cold start until the first `getUpdates` call succeeds —
-this is normal for the first couple of minutes after `docker compose up`.
+With Telegram enabled, readiness also requires a successful poll within the
+last 120 seconds. Health returns HTTP 503 until the first successful poll
+and whenever the poll becomes stale. `telegram_ok` reports the poll status
+and `last_poll_age_s` reports its age in seconds.
 
 ## Backups
 
 A nightly snapshot at 03:20 local time (`TZ` from `.env`) into `backups/`,
 keeping the last 30 days. `backups/` is 700, owned by the deploying user —
 `prepare-host.sh` sets this before first start and will refuse to run without
-it. `backups/mailbox-token` is the mirrored copy of the token from step 5
-above; it is never displayed by any command in this document.
+it. Legacy installations mirror the shared credential to
+`backups/mailbox-token`.
 
 ## Hook (formerly Relay)
 
@@ -297,8 +305,8 @@ are refused. The page uses a restrictive CSP with only its fixed launch script a
 fixed stylesheet, each allowed by its SHA-256 hash (no `'unsafe-inline'`), and its icon as a fixed `data:` image (`img-src data:`), no external assets, credentials or redirect destination. Both schemes work on
 Mac; `relay://` links remain supported.
 
-`MAILBOX_TELEGRAM_MODE=full` is the default and retains Telegram answers, Done,
-Skip and text replies. `alert` sends only project, title, urgency and Open in
+Setting both Telegram credentials enables delivery. In the default `full`
+mode, Telegram accepts answers, Done, Skip and text replies. `alert` sends only project, title, urgency and Open in
 Hook guidance for asks, including corrections and edits. Its only button is
 Open in Hook when a base is configured. Old ask buttons and text replies are
 refused with Open in Hook guidance and store no owner action or reply. Ask
@@ -447,9 +455,9 @@ exactly as before (pinned by `tests/test_asks_golden.py`).
 
 ## Using it from Hook
 
-Hook's apps and its `relay` CLI talk to a Pond by URL and token: give them the
-Pond's address (behind your TLS proxy) and the token from
-`backups/mailbox-token`. A client checks `GET /version` and gates each feature
+On a fresh Pond, connect devices and agents through device admission above.
+Clients on a legacy installation use the Pond's HTTPS address and the shared
+token from `backups/mailbox-token`. A client checks `GET /version` and gates each feature
 on its name in `features`. Hook keeps the canonical wire and validation vectors
 in its `conformance/` folder; the copies in `mailbox/tests/` must match them byte
 for byte (`HOOK_CONFORMANCE_DIR`, see Development).
