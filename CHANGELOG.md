@@ -15,10 +15,42 @@ image").
 
 ## 1.16.0
 
-Schema 6 adds per-device and per-agent credentials, expiring single-use invites, native approval and
-individual revocation. The first device joins with a link minted by a local operator. Fresh installations
-use individual credentials. Existing databases retain legacy authentication on upgrade. Protocol stays 5.
-An authenticated native connection advertises the `admission` feature.
+Backwards compatible: `protocol` stays 5, and Hook clients that need `^1.5.0`
+keep working. One migration: schema 6 adds the admission tables. No new dependency.
+Upgraded databases keep their shared credential (legacy mode) and keep working as
+before; fresh installations use individual credentials. Two new feature names, sent
+only where they apply: `admission` (an authenticated native connection) and
+`managedInstall` (a managed installation).
+
+- Device and agent admission (#6): schema 6 adds per-device and per-agent
+  credentials, expiring single-use invites, native approval with a six-digit code,
+  and revocation of one device or agent. The first device joins with a link minted
+  on the server: `python3 -m mailbox.admin admission invite --first`. A lost device
+  is replaced with `admission devices` and `admission invite --recovery --replace ID`.
+  Clients claim an invite at `/admission/claim`. `MAILBOX_PUBLIC_ORIGIN` sets the
+  HTTPS origin printed in join links. The shared vectors are in
+  `admission-vectors.json`.
+- Asks and events are scoped to the enrolled agent (#7): on a native Pond an agent
+  creates asks, reads its own answers and updates its own asks; owner actions need an
+  approved device. Ask ownership is recorded when the ask is created and applies to
+  deduplication, listing and the event pages. Legacy installations keep their
+  existing authorization.
+- Telegram is optional (#9): a native Pond starts, accepts asks and delivers the
+  owner's replies with `TELEGRAM_BOT_TOKEN` and `MAILBOX_OWNER_ID` both unset. Then
+  `/health` depends on the database alone, its two Telegram fields are `null` and the
+  poll thread stays off. Setting only one of the two stops startup and names the
+  missing one. `MAILBOX_MEMBERS` still needs both. A configured bot keeps the full and
+  alert modes and its poll health check. Legacy Ponds still need both values.
+- Managed upgrades are fenced (#10): the database is bound to its installation
+  (`POND_INSTALL_ID`), a candidate started with `POND_MAINTENANCE=1` holds outside
+  writes and background delivery while the installer checks health, version and
+  database integrity, and `python3 -m mailbox.admin maintenance snapshot|check|restore
+  OPERATION_ID` takes, checks and restores an offline snapshot. `admin status --json`
+  reports the managed status.
+- The release notes draft lists the Pond's features (#8) on a `Features:` line next
+  to the image and digest, so Hook's installer can pick a release by feature.
+- The vector files stamped with the Pond's version (history, progress, strict-JSON,
+  append, document and phone) name 1.16.0.
 
 ## 1.15.2
 
