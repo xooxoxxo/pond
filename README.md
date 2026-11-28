@@ -596,16 +596,16 @@ need Docker with buildx, [cosign](https://docs.sigstore.dev/cosign/system_config
 and `jq`; no login.
 
 ```
-scripts/verify-image.sh 1.15.2 --digest sha256:<digest from the release notes>
+scripts/verify-image.sh 1.16.0 --digest sha256:<digest from the release notes>
 ```
 
-It resolves `ghcr.io/xooxoxxo/pond:1.15.2`, checks the digest matches the release notes,
+It resolves `ghcr.io/xooxoxxo/pond:1.16.0`, checks the digest matches the release notes,
 that the index holds both `linux/amd64` and `linux/arm64`, and that cosign verifies a
 signature on that digest from exactly this identity and issuer:
 
 ```
 cosign verify ghcr.io/xooxoxxo/pond@sha256:<digest> \
-  --certificate-identity https://github.com/xooxoxxo/pond/.github/workflows/release.yml@refs/tags/v1.15.2 \
+  --certificate-identity https://github.com/xooxoxxo/pond/.github/workflows/release.yml@refs/tags/v1.16.0 \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com
 ```
 

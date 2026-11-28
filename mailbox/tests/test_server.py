@@ -2987,7 +2987,7 @@ def test_link_page_script_aims_the_button_and_keeps_the_redirect():
 
 def test_1_12_1_is_described():
     """1.12.1 (the quiet-card launch page) is a patch: protocol 5, schema 5, no new
-    feature. 1.13.0, 1.14.0, 1.15.0, 1.15.1 and 1.15.2 came after: see test_the_version_is_1_15_2_with_protocol_5_and_schema_5."""
+    feature. 1.13.0, 1.14.0, 1.15.0, 1.15.1 and 1.15.2 came after: see test_the_version_is_1_16_0_with_protocol_5_and_schema_6."""
     from mailbox import FEATURES
     assert FEATURES[-4] == "ownerKeyDates"
     changelog = (REPO_ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
@@ -3028,7 +3028,7 @@ def test_1_9_0_is_still_described():
 
 def test_1_11_0_is_still_described():
     """1.12.0, 1.12.1, 1.13.0, 1.14.0, 1.15.0, 1.15.1 and 1.15.2 came after: the version check is
-    test_the_version_is_1_15_2_with_protocol_5_and_schema_5."""
+    test_the_version_is_1_16_0_with_protocol_5_and_schema_6."""
     from mailbox import FEATURES
     assert FEATURES[-5:-3] == ("ownerRevokeRequest", "ownerKeyDates")
     changelog = (REPO_ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
@@ -3044,7 +3044,7 @@ def test_1_11_0_is_still_described():
 def test_1_13_0_is_still_described():
     """1.13.0 (`fields`, a settings table on a step) is additive: protocol 5, no
     migration, one new feature name. 1.14.0, 1.15.0, 1.15.1 and 1.15.2 came after: see
-    test_the_version_is_1_15_2_with_protocol_5_and_schema_5."""
+    test_the_version_is_1_16_0_with_protocol_5_and_schema_6."""
     from mailbox import FEATURES
     assert FEATURES[-3] == "fields"
     changelog = (REPO_ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
@@ -3061,7 +3061,7 @@ def test_1_14_0_is_still_described():
     """1.14.0 (`brief`, POST /asks/{id}/ask-about) is additive: protocol 5, no
     migration, one new feature name always (`brief`) and one while a key is set
     (`askAbout`). 1.15.0, 1.15.1 and 1.15.2 came after: see
-    test_the_version_is_1_15_2_with_protocol_5_and_schema_5."""
+    test_the_version_is_1_16_0_with_protocol_5_and_schema_6."""
     from mailbox import FEATURES
     assert FEATURES[-2] == "brief" and "askAbout" not in FEATURES
     changelog = (REPO_ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
@@ -3076,14 +3076,32 @@ def test_1_14_0_is_still_described():
         assert needle in readme, needle
 
 
-def test_the_version_is_1_15_2_with_protocol_5_and_schema_5():
+def test_the_version_is_1_16_0_with_protocol_5_and_schema_6():
+    """1.16.0 adds device and agent admission (schema 6), scopes asks to the enrolled agent,
+    makes Telegram optional on native Ponds, fences managed upgrades and lists the features in
+    the release notes. Protocol 5, one migration, no new dependency, no new name at the end of
+    FEATURES: `admission` and `managedInstall` are sent only where they apply."""
+    from mailbox import ADMISSION_FEATURE, FEATURES, PROTOCOL, VERSION, migrations
+    assert (VERSION, PROTOCOL, migrations.SCHEMA_VERSION) == ("1.16.0", 5, 6)
+    assert FEATURES[-1] == "longAnswers" and ADMISSION_FEATURE == "admission"
+    changelog = (REPO_ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+    flat = " ".join(changelog.split("\n## 1.16.0\n", 1)[1].split("\n## ", 1)[0].split())
+    for needle in ("`protocol` stays 5", "schema 6", "No new dependency", "legacy mode",
+                   "`admission`", "`managedInstall`", "admission invite --first", "/admission/claim",
+                   "MAILBOX_PUBLIC_ORIGIN", "owner actions need an approved device", "Telegram is optional",
+                   "POND_INSTALL_ID", "POND_MAINTENANCE=1", "maintenance snapshot|check|restore",
+                   "`Features:` line", "name 1.16.0"):
+        assert needle in flat, needle
+    readme = " ".join((REPO_ROOT / "README.md").read_text(encoding="utf-8").split())
+    for needle in ('"version": "1.16.0"', "scripts/verify-image.sh 1.16.0", "release.yml@refs/tags/v1.16.0"):
+        assert needle in readme, needle
+
+
+def test_1_15_2_is_still_described():
     """1.15.2 is a patch of the release scripts: verify-image.sh no longer fails after a
     verify that passed, and it is the first published signed two-platform image, holding
     everything under 1.15.1 (tagged, never published). Protocol 5, no migration, no new
-    feature name."""
-    from mailbox import FEATURES, PROTOCOL, VERSION, migrations
-    assert (VERSION, PROTOCOL, migrations.SCHEMA_VERSION) == ("1.16.0", 5, 6)
-    assert FEATURES[-1] == "longAnswers"
+    feature name. 1.16.0 came after: see test_the_version_is_1_16_0_with_protocol_5_and_schema_6."""
     changelog = (REPO_ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
     flat = " ".join(changelog.split("\n## 1.15.2\n", 1)[1].split("\n## ", 1)[0].split())
     for needle in ("`protocol` stays 5", "No migration", "No new feature name", "No new dependency",
@@ -3091,15 +3109,12 @@ def test_the_version_is_1_15_2_with_protocol_5_and_schema_5():
                    "linux/amd64", "linux/arm64", "`tmp: unbound variable`", "registry-tag.sh",
                    "name 1.15.2"):
         assert needle in flat, needle
-    readme = " ".join((REPO_ROOT / "README.md").read_text(encoding="utf-8").split())
-    for needle in ('"version": "1.16.0"', "scripts/verify-image.sh 1.15.2", "release.yml@refs/tags/v1.15.2"):
-        assert needle in readme, needle
 
 
 def test_1_15_1_is_still_described():
     """1.15.1 is a patch: the Central Time ack paths encode the id and a notification ref
     must match whole. It was tagged but never published as an image. 1.15.2 came after:
-    see test_the_version_is_1_15_2_with_protocol_5_and_schema_5."""
+    see test_the_version_is_1_16_0_with_protocol_5_and_schema_6."""
     from mailbox import FEATURES
     assert FEATURES[-1] == "longAnswers"
     changelog = (REPO_ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
@@ -3113,7 +3128,7 @@ def test_1_15_1_is_still_described():
 def test_1_15_0_is_still_described():
     """1.15.0 (`longAnswers`) is additive: an owner's answer text takes 8000 characters
     (1000 before), as a message does. Protocol 5, no migration, one new feature name.
-    1.15.1 and 1.15.2 came after: see test_the_version_is_1_15_2_with_protocol_5_and_schema_5."""
+    1.15.1 and 1.15.2 came after: see test_the_version_is_1_16_0_with_protocol_5_and_schema_6."""
     from mailbox import FEATURES
     from mailbox.answers import MAX_ANSWER_TEXT
     assert FEATURES[-1] == "longAnswers" and MAX_ANSWER_TEXT == 8000
@@ -3132,7 +3147,7 @@ def test_1_15_0_is_still_described():
 def test_1_12_0_is_still_described():
     """1.12.0 (the total limit on stored documents) is additive: protocol 5, no
     migration, no new feature name. 1.12.1 and 1.13.0 came after: see
-    test_1_12_1_is_described and test_the_version_is_1_15_2_with_protocol_5_and_schema_5."""
+    test_1_12_1_is_described and test_the_version_is_1_16_0_with_protocol_5_and_schema_6."""
     from mailbox import FEATURES
     assert FEATURES[-4] == "ownerKeyDates"
     changelog = (REPO_ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
